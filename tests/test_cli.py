@@ -8,6 +8,7 @@ from yt_dlp.utils import DownloadError  # type: ignore[import-untyped]
 from youtube_downloader import __version__
 from youtube_downloader.cli import app
 from youtube_downloader.models import DownloadTask, MediaProfile
+from youtube_downloader.progress import RichProgressReporter
 
 runner = CliRunner()
 
@@ -197,3 +198,16 @@ def test_cli_handles_keyboard_interrupt_gracefully(mock_downloader_cls):
         "https://www.youtube.com/watch?v=live123",
     ])
     assert "interrupted" in result.stdout.lower()
+
+
+@patch("youtube_downloader.cli.MediaDownloader")
+def test_cli_configures_rich_progress_reporter(mock_downloader_cls):
+    mock_downloader = mock_downloader_cls.return_value
+    result = runner.invoke(app, [
+        "https://www.youtube.com/watch?v=example123",
+    ])
+    assert result.exit_code == 0
+    mock_downloader_cls.assert_called_once()
+    kwargs = mock_downloader_cls.call_args[1]
+    assert "progress_reporter" in kwargs
+    assert isinstance(kwargs["progress_reporter"], RichProgressReporter)

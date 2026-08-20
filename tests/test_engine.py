@@ -4,6 +4,11 @@ import pytest
 
 from youtube_downloader.engine import MediaDownloader, find_ffmpeg_location
 from youtube_downloader.models import DownloadTask, MediaProfile
+from youtube_downloader.progress import (
+    ProgressReporter,
+    RichProgressReporter,
+    SilentProgressReporter,
+)
 
 
 def test_format_selection_best():
@@ -288,5 +293,72 @@ def test_find_ffmpeg_location_static_ffmpeg():
             assert find_ffmpeg_location() is None
 
 
+def test_downloader_default_progress_reporter_is_silent():
+    downloader = MediaDownloader()
+    assert isinstance(downloader.progress_reporter, SilentProgressReporter)
 
 
+def test_downloader_accepts_progress_reporter_at_init():
+    custom_reporter = SilentProgressReporter()
+    downloader = MediaDownloader(progress_reporter=custom_reporter)
+    assert downloader.progress_reporter is custom_reporter
+
+
+@patch("youtube_downloader.engine.yt_dlp.YoutubeDL")
+def test_downloader_uses_progress_reporter_during_download(mock_ytdl_class, tmp_path):
+    mock_instance = MagicMock()
+    mock_ytdl_class.return_value.__enter__.return_value = mock_instance
+
+    class TrackingReporter:
+        def __init__(self):
+            self.entered = False
+            self.exited = False
+            self.events = []
+
+        def __enter__(self):
+            self.entered = True
+            return self
+
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            self.exited = True
+
+        def on_progress(self, data):
+            self.events.append(data)
+
+    reporter = TrackingReporter()
+    downloader = MediaDownloader(progress_reporter=reporter)
+    task = DownloadTask(
+        target_url="https://youtube.com/watch?v=123",
+        output_destination=tmp_path / "Videos",
+    )
+
+    downloader.download(task)
+
+    assert reporter.entered is True
+    assert reporter.exited is True
+    # Verify build_ytdl_options received reporter's hook
+    opts = mock_ytdl_class.call_args[0][0]
+    assert opts.get("progress_hooks") == [reporter.on_progress]
+
+
+@patch("youtube_downloader.engine.yt_dlp.YoutubeDL")
+def test_downloader_download_override_progress_reporter(mock_ytdl_class, tmp_path):
+    mock_instance = MagicMock()
+    mock_ytdl_class.return_value.__enter__.return_value = mock_instance
+
+    default_reporter = MagicMock(spec=ProgressReporter)
+    default_reporter.__enter__.return_value = default_reporter
+
+    override_reporter = MagicMock(spec=ProgressReporter)
+    override_reporter.__enter__.return_value = override_reporter
+
+    downloader = MediaDownloader(progress_reporter=default_reporter)
+    task = DownloadTask(
+        target_url="https://youtube.com/watch?v=123",
+        output_destination=tmp_path / "Videos",
+    )
+
+    downloader.download(task, progress_reporter=override_reporter)
+
+    default_reporter.__enter__.assert_not_called()
+    override_reporter.__enter__.assert_called_once()

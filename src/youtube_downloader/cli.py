@@ -9,6 +9,7 @@ from youtube_downloader.config import OutputDestinationResolver
 from youtube_downloader.diagnostics import diagnose_error, render_diagnostic_panel
 from youtube_downloader.engine import MediaDownloader
 from youtube_downloader.models import DownloadTask, MediaProfile
+from youtube_downloader.progress import RichProgressReporter
 from youtube_downloader.wizard import prompt_interactive_task
 
 app = typer.Typer(
@@ -119,7 +120,8 @@ def download(
     console.print(f"[bold cyan]Media Profile:[/bold cyan] {task.media_profile.value}")
     console.print(f"[bold magenta]Output Destination:[/bold magenta] {task.output_destination or dest_path}")
 
-    downloader = MediaDownloader()
+    reporter = RichProgressReporter(console=console)
+    downloader = MediaDownloader(progress_reporter=reporter)
     try:
         downloader.download(task)
         console.print("[bold green]Download completed successfully![/bold green]")

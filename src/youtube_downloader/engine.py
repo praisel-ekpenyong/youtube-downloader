@@ -3,26 +3,15 @@ from __future__ import annotations
 import os
 import shutil
 from pathlib import Path
+import time
 from typing import Any, Callable, Optional
 
 import yt_dlp  # type: ignore[import-untyped]
-from rich.console import Console
-from rich.progress import (
-    BarColumn,
-    DownloadColumn,
-    Progress,
-    TaskID,
-    TextColumn,
-    TimeRemainingColumn,
-    TransferSpeedColumn,
-)
 
-import time
 from youtube_downloader.config import OutputDestinationResolver
 from youtube_downloader.diagnostics import diagnose_error
 from youtube_downloader.models import DownloadTask, MediaProfile
-
-console = Console()
+from youtube_downloader.progress import ProgressReporter, SilentProgressReporter
 
 
 def find_ffmpeg_location() -> Optional[str]:
@@ -71,9 +60,11 @@ class MediaDownloader:
         self,
         ffmpeg_dir: Optional[str] = None,
         destination_resolver: Optional[OutputDestinationResolver] = None,
+        progress_reporter: Optional[ProgressReporter] = None,
     ):
         self.ffmpeg_dir = ffmpeg_dir or find_ffmpeg_location()
         self.destination_resolver = destination_resolver or OutputDestinationResolver()
+        self.progress_reporter: ProgressReporter = progress_reporter or SilentProgressReporter()
 
     def _get_resolver(self, task: DownloadTask) -> OutputDestinationResolver:
         """Get the OutputDestinationResolver for a given task."""
@@ -177,58 +168,20 @@ class MediaDownloader:
         task: DownloadTask,
         max_retries: int = 3,
         retry_delay: float = 1.0,
+        progress_reporter: Optional[ProgressReporter] = None,
     ) -> None:
-        """Execute the DownloadTask using yt-dlp with rich progress display and automatic retries."""
+        """Execute the DownloadTask using yt-dlp with progress reporting and automatic retries."""
         resolver = self._get_resolver(task)
         resolver.ensure_destination()
+        reporter = progress_reporter or self.progress_reporter
 
         attempt = 0
         while True:
             attempt += 1
             try:
-                with Progress(
-                    TextColumn("[bold blue]{task.fields[filename]}", justify="right"),
-                    BarColumn(bar_width=40),
-                    "[progress.percentage]{task.percentage:>3.1f}%",
-                    "•",
-                    DownloadColumn(),
-                    "•",
-                    TransferSpeedColumn(),
-                    "•",
-                    TimeRemainingColumn(),
-                    console=console,
-                    transient=True,
-                ) as progress:
-                    progress_task_id: Optional[TaskID] = None
-
-                    def progress_hook(d: dict[str, Any]) -> None:
-                        nonlocal progress_task_id
-                        status = d.get("status")
-                        if status == "downloading":
-                            filename = os.path.basename(d.get("filename", "Downloading..."))
-                            total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
-                            downloaded = d.get("downloaded_bytes", 0)
-
-                            if progress_task_id is None:
-                                progress_task_id = progress.add_task(
-                                    "download",
-                                    filename=filename,
-                                    total=total,
-                                    completed=downloaded,
-                                )
-                            else:
-                                progress.update(
-                                    progress_task_id,
-                                    filename=filename,
-                                    total=total,
-                                    completed=downloaded,
-                                )
-                        elif status == "finished":
-                            if progress_task_id is not None:
-                                progress.update(progress_task_id, completed=progress.tasks[progress_task_id].total)
-
+                with reporter:
                     opts = self.build_ytdl_options(
-                        task, progress_hook=progress_hook, resolver=resolver
+                        task, progress_hook=reporter.on_progress, resolver=resolver
                     )
                     with yt_dlp.YoutubeDL(opts) as ydl:
                         ydl.download([task.target_url])
@@ -236,10 +189,6 @@ class MediaDownloader:
             except Exception as exc:
                 diagnostic = diagnose_error(exc)
                 if diagnostic.is_transient and attempt < max_retries:
-                    console.print(
-                        f"[yellow]⚠ Download encountered transient error (attempt {attempt}/{max_retries}): {exc}. "
-                        f"Retrying in {retry_delay * attempt:.1f}s...[/yellow]"
-                    )
                     time.sleep(retry_delay * attempt)
                     continue
                 raise
