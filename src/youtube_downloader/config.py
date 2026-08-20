@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING, Optional
 
 from youtube_downloader.models import MediaProfile
 
@@ -29,16 +29,10 @@ class OutputDestinationResolver:
         destination.mkdir(parents=True, exist_ok=True)
         return destination
 
-    def build_output_template(self, target: Union[DownloadTask, MediaProfile]) -> str:
-        """Construct the complete yt-dlp output template for a Download Task or Media Profile."""
-        if isinstance(target, MediaProfile):
-            destination = self.root_dir
-            profile = target
-        else:
-            destination = self.resolve_destination(task=target)
-            profile = target.media_profile
-
-        category = profile.category_folder
+    def build_output_template(self, task: DownloadTask) -> str:
+        """Construct the complete yt-dlp output template for a Download Task."""
+        destination = self.resolve_destination(task=task)
+        category = task.media_profile.category_folder
         return (
             f"{destination.as_posix()}/"
             f"%(playlist_title&Playlists|{category})s/"
