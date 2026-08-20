@@ -4,13 +4,18 @@ import os
 import shutil
 from pathlib import Path
 import time
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, Sequence, Union, overload
 
 import yt_dlp  # type: ignore[import-untyped]
 
-from youtube_downloader.config import OutputDestinationResolver
+from youtube_downloader.config import DEFAULT_OUTPUT_ROOT
 from youtube_downloader.diagnostics import diagnose_error
-from youtube_downloader.models import DownloadOutcome, DownloadTask, MediaProfile
+from youtube_downloader.models import (
+    DownloadOutcome,
+    DownloadQueue,
+    DownloadTask,
+    MediaProfile,
+)
 from youtube_downloader.progress import ProgressReporter, SilentProgressReporter
 
 
@@ -54,16 +59,16 @@ _PROFILE_AUDIO_POSTPROCESSORS: dict[MediaProfile, dict[str, Any]] = {
 
 
 class MediaDownloader:
-    """Core download engine wrapping yt-dlp with rich feedback and media profiles."""
+    """Core download engine wrapping yt-dlp with rich feedback, media profiles, and batch queues."""
 
     def __init__(
         self,
         ffmpeg_dir: Optional[str] = None,
-        destination_resolver: Optional[OutputDestinationResolver] = None,
+        default_destination: Optional[Path] = None,
         progress_reporter: Optional[ProgressReporter] = None,
     ):
         self.ffmpeg_dir = ffmpeg_dir or find_ffmpeg_location()
-        self.destination_resolver = destination_resolver or OutputDestinationResolver()
+        self.default_destination = Path(default_destination) if default_destination else DEFAULT_OUTPUT_ROOT
         self.progress_reporter: ProgressReporter = progress_reporter or SilentProgressReporter()
 
     @staticmethod
@@ -79,6 +84,29 @@ class MediaDownloader:
         postprocessor = _PROFILE_AUDIO_POSTPROCESSORS.get(profile)
         return dict(postprocessor) if postprocessor is not None else None
 
+    def _resolve_destination(self, task: Optional[DownloadTask] = None) -> Path:
+        """Resolve the active Output Destination for a Download Task or fallback to default_destination."""
+        if task is not None and task.output_destination is not None:
+            return Path(task.output_destination)
+        return self.default_destination
+
+    def _ensure_destination(self, task: Optional[DownloadTask] = None) -> Path:
+        """Ensure the Output Destination directory exists on the filesystem and return it."""
+        destination = self._resolve_destination(task=task)
+        destination.mkdir(parents=True, exist_ok=True)
+        return destination
+
+    def _build_output_template(self, task: DownloadTask) -> str:
+        """Construct the complete yt-dlp output template for a Download Task."""
+        destination = self._resolve_destination(task=task)
+        category = task.media_profile.category_folder
+        return (
+            f"{destination.as_posix()}/"
+            f"%(playlist_title&Playlists|{category})s/"
+            f"%(playlist_title&{{}}|.)s/"
+            f"%(playlist_index&{{:02d}} - |)s%(title)s [%(id)s].%(ext)s"
+        )
+
     def _build_ytdl_options(
         self,
         task: DownloadTask,
@@ -87,7 +115,7 @@ class MediaDownloader:
         """Construct yt-dlp options dictionary from a DownloadTask."""
         postprocessors: list[dict[str, Any]] = []
 
-        outtmpl_str = self.destination_resolver.build_output_template(task)
+        outtmpl_str = self._build_output_template(task)
 
         opts: dict[str, Any] = {
             "format": self._get_format_for_profile(task.media_profile, task.custom_format),
@@ -155,25 +183,23 @@ class MediaDownloader:
 
         return opts
 
-    def download(
+    def _execute_task(
         self,
         task: DownloadTask,
-        max_retries: int = 3,
-        retry_delay: float = 1.0,
-        progress_reporter: Optional[ProgressReporter] = None,
+        max_retries: int,
+        retry_delay: float,
+        reporter: ProgressReporter,
     ) -> DownloadOutcome:
-        """Execute the DownloadTask using yt-dlp with progress reporting and automatic retries."""
-        self.destination_resolver.ensure_destination(task=task)
-        reporter = progress_reporter or self.progress_reporter
+        """Execute a single DownloadTask with automatic retries."""
+        self._ensure_destination(task=task)
         opts = self._build_ytdl_options(task, progress_hook=reporter.on_progress)
 
         attempt = 0
         while True:
             attempt += 1
             try:
-                with reporter:
-                    with yt_dlp.YoutubeDL(opts) as ydl:
-                        ydl.download([task.target_url])
+                with yt_dlp.YoutubeDL(opts) as ydl:
+                    ydl.download([task.target_url])
                 return DownloadOutcome(
                     task=task,
                     success=True,
@@ -191,4 +217,55 @@ class MediaDownloader:
                     attempts=attempt,
                     error=exc,
                 )
+
+    @overload
+    def download(
+        self,
+        target: DownloadTask,
+        max_retries: int = 3,
+        retry_delay: float = 1.0,
+        progress_reporter: Optional[ProgressReporter] = None,
+    ) -> DownloadOutcome: ...
+
+    @overload
+    def download(
+        self,
+        target: Union[DownloadQueue, Sequence[DownloadTask]],
+        max_retries: int = 3,
+        retry_delay: float = 1.0,
+        progress_reporter: Optional[ProgressReporter] = None,
+    ) -> list[DownloadOutcome]: ...
+
+    def download(
+        self,
+        target: Union[DownloadTask, DownloadQueue, Sequence[DownloadTask]],
+        max_retries: int = 3,
+        retry_delay: float = 1.0,
+        progress_reporter: Optional[ProgressReporter] = None,
+    ) -> Union[DownloadOutcome, list[DownloadOutcome]]:
+        """Execute a DownloadTask or DownloadQueue using yt-dlp with progress reporting and automatic retries."""
+        reporter = progress_reporter or self.progress_reporter
+
+        if isinstance(target, DownloadTask):
+            with reporter:
+                return self._execute_task(
+                    task=target,
+                    max_retries=max_retries,
+                    retry_delay=retry_delay,
+                    reporter=reporter,
+                )
+
+        tasks = list(target)
+        outcomes: list[DownloadOutcome] = []
+        with reporter:
+            for task in tasks:
+                outcome = self._execute_task(
+                    task=task,
+                    max_retries=max_retries,
+                    retry_delay=retry_delay,
+                    reporter=reporter,
+                )
+                outcomes.append(outcome)
+        return outcomes
+
 

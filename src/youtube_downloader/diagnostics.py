@@ -5,8 +5,6 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Union
 
-from rich.panel import Panel
-
 
 class DiagnosticCategory(str, Enum):
     """Categorized root causes for download and post-processing failures."""
@@ -133,16 +131,3 @@ def diagnose_error(error: Union[Exception, str]) -> DiagnosticReport:
         is_transient=False,
     )
 
-
-def render_diagnostic_panel(report: DiagnosticReport) -> Panel:
-    """Render a DiagnosticReport into a formatted Rich Panel."""
-    content = (
-        f"[bold red]Problem:[/bold red] {report.message}\n\n"
-        f"[bold cyan]Suggestion:[/bold cyan] {report.suggestion}"
-    )
-    return Panel(
-        content,
-        title=f"[bold red]{report.title}[/bold red]",
-        border_style="red",
-        expand=False,
-    )

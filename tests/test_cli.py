@@ -6,7 +6,7 @@ from yt_dlp.utils import DownloadError  # type: ignore[import-untyped]
 
 
 from youtube_downloader import __version__
-from youtube_downloader.cli import app
+from youtube_downloader.cli import app, render_diagnostic_panel
 from youtube_downloader.diagnostics import DiagnosticCategory, DiagnosticReport
 from youtube_downloader.models import DownloadOutcome, DownloadTask, MediaProfile
 from youtube_downloader.progress import RichProgressReporter
@@ -124,7 +124,7 @@ def test_cli_executes_download(mock_downloader_cls):
     task = mock_downloader.download.call_args[0][0]
     assert task.target_url == "https://www.youtube.com/watch?v=example123"
     assert task.media_profile.value == "720p"
-    assert task.output_destination == Path.home() / "Downloads" / "YouTube"
+    assert task.output_destination is None
     assert "Download completed successfully" in result.stdout
 
 
@@ -141,7 +141,7 @@ def test_cli_executes_audio_mp3_download(mock_downloader_cls):
     task = mock_downloader.download.call_args[0][0]
     assert task.target_url == "https://www.youtube.com/watch?v=example123"
     assert task.media_profile.value == "audio-mp3"
-    assert task.output_destination == Path.home() / "Downloads" / "YouTube"
+    assert task.output_destination is None
     assert "Download completed successfully" in result.stdout
 
 
@@ -158,7 +158,7 @@ def test_cli_executes_audio_flac_download(mock_downloader_cls):
     task = mock_downloader.download.call_args[0][0]
     assert task.target_url == "https://www.youtube.com/watch?v=example123"
     assert task.media_profile.value == "audio-flac"
-    assert task.output_destination == Path.home() / "Downloads" / "YouTube"
+    assert task.output_destination is None
     assert "Download completed successfully" in result.stdout
 
 
@@ -248,3 +248,17 @@ def test_cli_configures_rich_progress_reporter(mock_downloader_cls):
     kwargs = mock_downloader_cls.call_args[1]
     assert "progress_reporter" in kwargs
     assert isinstance(kwargs["progress_reporter"], RichProgressReporter)
+
+
+def test_render_diagnostic_panel():
+    report = DiagnosticReport(
+        category=DiagnosticCategory.MISSING_FFMPEG,
+        title="FFmpeg Not Found",
+        message="FFmpeg is required for audio extraction.",
+        suggestion="Install FFmpeg.",
+        is_transient=False,
+    )
+    panel = render_diagnostic_panel(report)
+    assert panel is not None
+    assert "FFmpeg Not Found" in panel.title
+

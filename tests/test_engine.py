@@ -4,12 +4,18 @@ import pytest
 
 from youtube_downloader.diagnostics import DiagnosticCategory
 from youtube_downloader.engine import MediaDownloader, find_ffmpeg_location
-from youtube_downloader.models import DownloadOutcome, DownloadTask, MediaProfile
+from youtube_downloader.models import (
+    DownloadOutcome,
+    DownloadQueue,
+    DownloadTask,
+    MediaProfile,
+)
 from youtube_downloader.progress import (
     ProgressReporter,
     RichProgressReporter,
     SilentProgressReporter,
 )
+
 
 
 @patch("youtube_downloader.engine.yt_dlp.YoutubeDL")
@@ -522,4 +528,159 @@ def test_downloader_download_override_progress_reporter(mock_ytdl_class, tmp_pat
 
     default_reporter.__enter__.assert_not_called()
     override_reporter.__enter__.assert_called_once()
+
+
+@patch("youtube_downloader.engine.yt_dlp.YoutubeDL")
+def test_downloader_download_queue_execution(mock_ytdl_class):
+    mock_instance = MagicMock()
+    mock_ytdl_class.return_value.__enter__.return_value = mock_instance
+
+    downloader = MediaDownloader()
+    queue = DownloadQueue([
+        DownloadTask(target_url="https://youtube.com/watch?v=item1"),
+        DownloadTask(target_url="https://youtube.com/watch?v=item2"),
+    ])
+
+    outcomes = downloader.download(queue)
+
+    assert len(outcomes) == 2
+    assert outcomes[0].success is True
+    assert outcomes[0].task.target_url == "https://youtube.com/watch?v=item1"
+    assert outcomes[1].success is True
+    assert outcomes[1].task.target_url == "https://youtube.com/watch?v=item2"
+    assert mock_instance.download.call_count == 2
+
+
+@patch("youtube_downloader.engine.yt_dlp.YoutubeDL")
+def test_downloader_download_queue_partial_failure(mock_ytdl_class):
+    from yt_dlp.utils import DownloadError  # type: ignore[import-untyped]
+
+    mock_instance = MagicMock()
+    mock_instance.download.side_effect = [
+        None,
+        DownloadError("Video unavailable"),
+    ]
+    mock_ytdl_class.return_value.__enter__.return_value = mock_instance
+
+    downloader = MediaDownloader()
+    queue = DownloadQueue()
+    queue.add(DownloadTask(target_url="https://youtube.com/watch?v=ok"))
+    queue.add(DownloadTask(target_url="https://youtube.com/watch?v=bad"))
+
+    outcomes = downloader.download(queue)
+
+    assert len(outcomes) == 2
+    assert outcomes[0].success is True
+    assert outcomes[1].success is False
+    assert outcomes[1].diagnostic is not None
+    assert outcomes[1].diagnostic.category == DiagnosticCategory.NOT_FOUND_OR_UNAVAILABLE
+
+
+@patch("youtube_downloader.engine.yt_dlp.YoutubeDL")
+def test_downloader_download_queue_reporter_lifecycle(mock_ytdl_class):
+    mock_instance = MagicMock()
+    mock_ytdl_class.return_value.__enter__.return_value = mock_instance
+
+    class CountingReporter:
+        def __init__(self):
+            self.enter_count = 0
+            self.exit_count = 0
+
+        def __enter__(self):
+            self.enter_count += 1
+            return self
+
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            self.exit_count += 1
+
+        def on_progress(self, status):
+            pass
+
+    reporter = CountingReporter()
+    downloader = MediaDownloader(progress_reporter=reporter)
+    queue = DownloadQueue([
+        DownloadTask(target_url="https://youtube.com/watch?v=t1"),
+        DownloadTask(target_url="https://youtube.com/watch?v=t2"),
+        DownloadTask(target_url="https://youtube.com/watch?v=t3"),
+    ])
+
+    downloader.download(queue)
+
+    # Reporter enters and exits once around the entire batch
+    assert reporter.enter_count == 1
+    assert reporter.exit_count == 1
+
+
+def test_downloader_default_destination_fallback(tmp_path):
+    from youtube_downloader.config import DEFAULT_OUTPUT_ROOT
+    downloader = MediaDownloader()
+    assert downloader.default_destination == DEFAULT_OUTPUT_ROOT
+    assert downloader._resolve_destination() == DEFAULT_OUTPUT_ROOT
+
+    custom_dest = tmp_path / "CustomRoot"
+    custom_downloader = MediaDownloader(default_destination=custom_dest)
+    assert custom_downloader.default_destination == custom_dest
+    assert custom_downloader._resolve_destination() == custom_dest
+
+
+def test_downloader_destination_task_override(tmp_path):
+    downloader = MediaDownloader(default_destination=tmp_path / "Default")
+    task = DownloadTask(target_url="https://youtube.com/watch?v=123", output_destination=tmp_path / "Override")
+    assert downloader._resolve_destination(task=task) == tmp_path / "Override"
+
+
+def test_downloader_ensures_destination_directory(tmp_path):
+    target_dir = tmp_path / "NewEngineFolder"
+    downloader = MediaDownloader()
+    task = DownloadTask(target_url="https://youtube.com/watch?v=123", output_destination=target_dir)
+    assert not target_dir.exists()
+    ensured = downloader._ensure_destination(task=task)
+    assert target_dir.exists()
+    assert ensured == target_dir
+
+
+def test_downloader_output_template_rendering(tmp_path):
+    import yt_dlp  # type: ignore[import-untyped]
+    downloader = MediaDownloader(default_destination=tmp_path)
+
+    # 1. Single video rendering
+    video_task = DownloadTask(target_url="https://youtube.com/watch?v=123", media_profile=MediaProfile.BEST)
+    video_tmpl = downloader._build_output_template(video_task)
+    ydl_video = yt_dlp.YoutubeDL({"outtmpl": {"default": video_tmpl}})
+    single_vid_info = {"title": "Sample Video", "id": "vid001", "ext": "mp4"}
+    vid_path = Path(ydl_video.prepare_filename(single_vid_info))
+    assert vid_path == tmp_path / "Videos" / "Sample Video [vid001].mp4"
+
+    # 2. Single audio rendering
+    audio_task = DownloadTask(target_url="https://youtube.com/watch?v=123", media_profile=MediaProfile.AUDIO_MP3)
+    audio_tmpl = downloader._build_output_template(audio_task)
+    ydl_audio = yt_dlp.YoutubeDL({"outtmpl": {"default": audio_tmpl}})
+    single_aud_info = {"title": "Sample Song", "id": "aud001", "ext": "mp3"}
+    aud_path = Path(ydl_audio.prepare_filename(single_aud_info))
+    assert aud_path == tmp_path / "Audio" / "Sample Song [aud001].mp3"
+
+    # 3. Playlist video rendering with isolation and track index
+    pl_vid_info = {
+        "title": "Episode 1",
+        "id": "ep001",
+        "ext": "mp4",
+        "playlist_title": "Documentary Series",
+        "playlist_index": 1,
+    }
+    pl_vid_path = Path(ydl_video.prepare_filename(pl_vid_info))
+    assert pl_vid_path == tmp_path / "Playlists" / "Documentary Series" / "01 - Episode 1 [ep001].mp4"
+
+    # 4. Playlist audio rendering with isolation and track index
+    pl_aud_info = {
+        "title": "Track 12",
+        "id": "trk012",
+        "ext": "flac",
+        "playlist_title": "Symphony No 9",
+        "playlist_index": 12,
+    }
+    flac_task = DownloadTask(target_url="https://youtube.com/watch?v=123", media_profile=MediaProfile.AUDIO_FLAC)
+    ydl_flac = yt_dlp.YoutubeDL({"outtmpl": {"default": downloader._build_output_template(flac_task)}})
+    pl_aud_path = Path(ydl_flac.prepare_filename(pl_aud_info))
+    assert pl_aud_path == tmp_path / "Playlists" / "Symphony No 9" / "12 - Track 12 [trk012].flac"
+
 

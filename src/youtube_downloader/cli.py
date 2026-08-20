@@ -5,8 +5,8 @@ from rich.console import Console
 from rich.panel import Panel
 
 from youtube_downloader import __version__
-from youtube_downloader.config import OutputDestinationResolver
-from youtube_downloader.diagnostics import render_diagnostic_panel
+from youtube_downloader.config import DEFAULT_OUTPUT_ROOT
+from youtube_downloader.diagnostics import DiagnosticReport
 from youtube_downloader.engine import MediaDownloader
 from youtube_downloader.models import DownloadTask, MediaProfile
 from youtube_downloader.progress import RichProgressReporter
@@ -24,6 +24,20 @@ def version_callback(value: bool):
     if value:
         console.print(f"[bold cyan]ytdl[/bold cyan] version: [green]{__version__}[/green]")
         raise typer.Exit()
+
+
+def render_diagnostic_panel(report: DiagnosticReport) -> Panel:
+    """Render a DiagnosticReport into a formatted Rich Panel for CLI display."""
+    content = (
+        f"[bold red]Problem:[/bold red] {report.message}\n\n"
+        f"[bold cyan]Suggestion:[/bold cyan] {report.suggestion}"
+    )
+    return Panel(
+        content,
+        title=f"[bold red]{report.title}[/bold red]",
+        border_style="red",
+        expand=False,
+    )
 
 
 @app.command(help="YouTube Downloader — Download, convert, and organize media from YouTube.")
@@ -93,21 +107,18 @@ def download(
     ),
 ):
     """YouTube Downloader — Download, convert, and organize media from YouTube."""
-    resolver = OutputDestinationResolver(root_dir=output_destination)
-    resolved_destination = resolver.resolve_destination()
-
     if not target_url:
         task = prompt_interactive_task(console=console)
         if task is None:
             return
-        if not task.output_destination:
-            task.output_destination = resolved_destination
+        if output_destination and not task.output_destination:
+            task.output_destination = output_destination
     else:
         task = DownloadTask(
             target_url=target_url,
             media_profile=profile,
             custom_format=custom_format,
-            output_destination=resolved_destination,
+            output_destination=output_destination,
             embed_subtitles=embed_subs,
             embed_metadata=embed_metadata,
             embed_chapters=embed_chapters,
@@ -116,12 +127,14 @@ def download(
             playlist_items=items,
         )
 
+    reporter = RichProgressReporter(console=console)
+    downloader = MediaDownloader(default_destination=output_destination, progress_reporter=reporter)
+    active_destination = task.output_destination or downloader.default_destination
+
     console.print(f"[bold green]Target URL:[/bold green] {task.target_url}")
     console.print(f"[bold cyan]Media Profile:[/bold cyan] {task.media_profile.value}")
-    console.print(f"[bold magenta]Output Destination:[/bold magenta] {resolver.resolve_destination(task=task)}")
+    console.print(f"[bold magenta]Output Destination:[/bold magenta] {active_destination}")
 
-    reporter = RichProgressReporter(console=console)
-    downloader = MediaDownloader(destination_resolver=resolver, progress_reporter=reporter)
     try:
         outcome = downloader.download(task)
         if outcome.success:
@@ -142,3 +155,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

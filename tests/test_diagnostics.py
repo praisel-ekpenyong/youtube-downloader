@@ -5,7 +5,6 @@ from youtube_downloader.diagnostics import (
     DiagnosticCategory,
     DiagnosticReport,
     diagnose_error,
-    render_diagnostic_panel,
 )
 
 
@@ -55,14 +54,9 @@ def test_diagnose_transient_network():
     assert report.is_transient is True
 
 
-def test_render_diagnostic_panel():
-    report = DiagnosticReport(
-        category=DiagnosticCategory.MISSING_FFMPEG,
-        title="FFmpeg Not Found",
-        message="FFmpeg is required for audio extraction and muxing.",
-        suggestion="Install FFmpeg or use static-ffmpeg.",
-        is_transient=False,
-    )
-    panel = render_diagnostic_panel(report)
-    assert panel is not None
-    assert "FFmpeg Not Found" in panel.title
+def test_diagnostics_module_has_no_rich_dependency():
+    import sys
+    import youtube_downloader.diagnostics as diag_mod
+    assert "rich" not in getattr(diag_mod, "__dict__", {})
+    assert not hasattr(diag_mod, "render_diagnostic_panel")
+

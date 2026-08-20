@@ -48,6 +48,29 @@ class DownloadTask:
 
 
 @dataclass
+class DownloadQueue:
+    """An ordered collection of Download Tasks to be executed sequentially or concurrently."""
+    tasks: list[DownloadTask] = None  # type: ignore[assignment]
+
+    def __post_init__(self) -> None:
+        if self.tasks is None:
+            self.tasks = []
+
+    def add(self, task: DownloadTask) -> None:
+        """Append a DownloadTask to the end of the queue."""
+        self.tasks.append(task)
+
+    def __iter__(self):
+        return iter(self.tasks)
+
+    def __len__(self) -> int:
+        return len(self.tasks)
+
+    def __getitem__(self, index: int) -> DownloadTask:
+        return self.tasks[index]
+
+
+@dataclass
 class DownloadOutcome:
     """The structured result of a download execution."""
     task: DownloadTask
@@ -55,5 +78,6 @@ class DownloadOutcome:
     diagnostic: Optional[DiagnosticReport] = None
     attempts: int = 1
     error: Optional[Exception] = None
+
 
 
