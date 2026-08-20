@@ -6,6 +6,7 @@ from rich.panel import Panel
 
 from youtube_downloader import __version__
 from youtube_downloader.config import OutputDestinationResolver
+from youtube_downloader.engine import MediaDownloader
 from youtube_downloader.models import DownloadTask, MediaProfile
 
 app = typer.Typer(
@@ -114,9 +115,14 @@ def download(
     console.print(f"[bold green]Target URL:[/bold green] {task.target_url}")
     console.print(f"[bold cyan]Media Profile:[/bold cyan] {task.media_profile.value}")
     console.print(f"[bold magenta]Output Destination:[/bold magenta] {dest_path}")
+
     if dry_run:
         console.print("[yellow][Dry Run] Task constructed successfully. Exiting without download.[/yellow]")
         return
+
+    downloader = MediaDownloader()
+    downloader.download(task)
+    console.print("[bold green]✔ Download completed successfully![/bold green]")
 
 
 def main():

@@ -1,3 +1,4 @@
+from unittest.mock import patch
 from typer.testing import CliRunner
 from youtube_downloader import __version__
 from youtube_downloader.cli import app
@@ -37,3 +38,19 @@ def test_cli_parse_arguments():
     assert result.exit_code == 0
     assert "https://www.youtube.com/watch?v=example123" in result.stdout
     assert "1080p" in result.stdout
+
+
+@patch("youtube_downloader.cli.MediaDownloader")
+def test_cli_executes_download(mock_downloader_cls):
+    mock_downloader = mock_downloader_cls.return_value
+    result = runner.invoke(app, [
+        "https://www.youtube.com/watch?v=example123",
+        "--profile", "720p",
+    ])
+    assert result.exit_code == 0
+    mock_downloader_cls.assert_called_once()
+    mock_downloader.download.assert_called_once()
+    task = mock_downloader.download.call_args[0][0]
+    assert task.target_url == "https://www.youtube.com/watch?v=example123"
+    assert task.media_profile.value == "720p"
+    assert "Download completed successfully" in result.stdout
