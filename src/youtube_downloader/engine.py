@@ -57,12 +57,13 @@ class MediaDownloader:
         self,
         task: DownloadTask,
         progress_hook: Optional[Callable[[dict[str, Any]], None]] = None,
+        resolver: Optional[OutputDestinationResolver] = None,
     ) -> dict[str, Any]:
         """Construct yt-dlp options dictionary from a DownloadTask."""
         postprocessors: list[dict[str, Any]] = []
 
-        resolver = self._get_resolver(task)
-        outtmpl_str = resolver.build_output_template(task.media_profile)
+        res = resolver or self._get_resolver(task)
+        outtmpl_str = res.build_output_template(task.media_profile)
 
         opts: dict[str, Any] = {
             "format": self.get_format_for_profile(task.media_profile, task.custom_format),
@@ -77,9 +78,6 @@ class MediaDownloader:
 
         if self.ffmpeg_dir:
             opts["ffmpeg_location"] = self.ffmpeg_dir
-
-        if task.output_destination:
-            opts["paths"] = {"home": str(task.output_destination)}
 
         if task.playlist_items:
             opts["playlist_items"] = task.playlist_items
@@ -182,7 +180,9 @@ class MediaDownloader:
                             if progress_task_id is not None:
                                 progress.update(progress_task_id, completed=progress.tasks[progress_task_id].total)
 
-                    opts = self.build_ytdl_options(task, progress_hook=progress_hook)
+                    opts = self.build_ytdl_options(
+                        task, progress_hook=progress_hook, resolver=resolver
+                    )
                     with yt_dlp.YoutubeDL(opts) as ydl:
                         ydl.download([task.target_url])
                 return

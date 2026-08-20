@@ -22,9 +22,8 @@ class OutputDestinationResolver:
             f"%(playlist_index&{{:02d}} - |)s%(title)s [%(id)s].%(ext)s"
         )
 
-    def ensure_destination(self, path: Optional[Path] = None) -> Path:
+    def ensure_destination(self) -> Path:
         """Ensure the Output Destination directory exists on the filesystem and return it."""
-        target = Path(path) if path else self.root_dir
-        target.mkdir(parents=True, exist_ok=True)
-        return target
+        self.root_dir.mkdir(parents=True, exist_ok=True)
+        return self.root_dir
 

@@ -28,20 +28,11 @@ def test_build_output_template(tmp_path):
     assert "Playlists|Audio" in audio_tmpl
 
 
-def test_ensure_destination_default(tmp_path):
+def test_ensure_destination(tmp_path):
     dest = tmp_path / "created_dir"
     resolver = OutputDestinationResolver(root_dir=dest)
     assert not dest.exists()
     result = resolver.ensure_destination()
     assert dest.exists()
     assert result == dest
-
-
-def test_ensure_destination_explicit_path(tmp_path):
-    resolver = OutputDestinationResolver()
-    explicit = tmp_path / "explicit_dir"
-    assert not explicit.exists()
-    result = resolver.ensure_destination(explicit)
-    assert explicit.exists()
-    assert result == explicit
 
