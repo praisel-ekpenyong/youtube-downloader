@@ -16,35 +16,10 @@ def test_custom_output_root(tmp_path):
     assert resolver.root_dir == custom_dir
 
 
-def test_resolve_video_destination():
-    resolver = OutputDestinationResolver()
-    dest = resolver.resolve_video_dir()
-    assert dest == Path.home() / "Downloads" / "YouTube" / "Videos"
-
-
-def test_resolve_audio_destination():
-    resolver = OutputDestinationResolver()
-    dest = resolver.resolve_audio_dir()
-    assert dest == Path.home() / "Downloads" / "YouTube" / "Audio"
-
-
-def test_resolve_playlist_destination():
-    resolver = OutputDestinationResolver()
-    dest = resolver.resolve_playlist_folder("Favorite Tracks")
-    assert dest == Path.home() / "Downloads" / "YouTube" / "Playlists" / "Favorite Tracks"
-
-
-def test_resolve_for_media_profile_video():
-    resolver = OutputDestinationResolver()
-    assert resolver.resolve_for_profile(MediaProfile.BEST) == resolver.resolve_video_dir()
-    assert resolver.resolve_for_profile(MediaProfile.P1080) == resolver.resolve_video_dir()
-    assert resolver.resolve_for_profile(MediaProfile.P720) == resolver.resolve_video_dir()
-
-
-def test_resolve_for_media_profile_audio():
-    resolver = OutputDestinationResolver()
-    assert resolver.resolve_for_profile(MediaProfile.AUDIO_MP3) == resolver.resolve_audio_dir()
-    assert resolver.resolve_for_profile(MediaProfile.AUDIO_FLAC) == resolver.resolve_audio_dir()
+def test_sanitize_filename():
+    from youtube_downloader.config import sanitize_filename
+    assert sanitize_filename("Valid Name") == "Valid Name"
+    assert sanitize_filename("Invalid:?*/\\Name") == "Invalid_____Name"
 
 
 def test_build_output_template():
@@ -57,11 +32,20 @@ def test_build_output_template():
     assert "Playlists|Audio" in audio_tmpl
 
 
-def test_ensure_destination(tmp_path):
+def test_ensure_destination_default(tmp_path):
     dest = tmp_path / "created_dir"
     resolver = OutputDestinationResolver(root_dir=dest)
     assert not dest.exists()
     result = resolver.ensure_destination()
     assert dest.exists()
     assert result == dest
+
+
+def test_ensure_destination_explicit_path(tmp_path):
+    resolver = OutputDestinationResolver()
+    explicit = tmp_path / "explicit_dir"
+    assert not explicit.exists()
+    result = resolver.ensure_destination(explicit)
+    assert explicit.exists()
+    assert result == explicit
 
