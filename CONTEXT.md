@@ -1,4 +1,4 @@
-﻿# YouTube Downloader
+# YouTube Downloader
 
 A command-line tool for downloading, converting, and organizing media from YouTube videos, livestreams, and playlists.
 
@@ -39,3 +39,12 @@ _Avoid_: Captions file, SRT
 **Livestream Recording**:
 The continuous capture, remuxing, and finalization of an ongoing live broadcast from its beginning.
 _Avoid_: Stream rip, live dump
+
+**Metadata Preview**:
+A lightweight pre-fetch of media details (title, thumbnail, duration, and channel) for a Target URL prior to initiating a download.
+_Avoid_: Link scrape, video peek, URL inspector
+
+**Diagnostic Report**:
+A structured analysis of a failed Download Task identifying the root failure mode and actionable remediation steps.
+_Avoid_: Error log, traceback, failure message
+

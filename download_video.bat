@@ -15,7 +15,7 @@ where yt-dlp >nul 2>&1
 if %ERRORLEVEL% NEQ 0 (
     echo [!] yt-dlp was not found in PATH. Checking Python module...
     python -m yt_dlp --version >nul 2>&1
-    if %ERRORLEVEL% EQU 0 (
+    if !ERRORLEVEL! EQU 0 (
         set "YTDLP_CMD=python -m yt_dlp"
     ) else (
         echo [ERROR] yt-dlp is not installed!
@@ -88,12 +88,12 @@ echo.
 echo ================================================================
 echo Starting Download...
 echo ================================================================
-echo URL: %TARGET_URL%
+echo URL: !TARGET_URL!
 echo.
 
-%YTDLP_CMD% %FFMPEG_PARAM% --extractor-args "youtube:player_client=android,web" --downloader "m3u8:native" --live-from-start -N 6 --paths "%OUTPUT_DIR%" -o "%%(title)s [%%(id)s].%%(ext)s" %FORMAT_OPTS% "%TARGET_URL%"
+%YTDLP_CMD% %FFMPEG_PARAM% --extractor-args "youtube:player_client=android,web" --downloader "m3u8:native" --live-from-start -N 6 --paths "%OUTPUT_DIR%" -o "%%(title)s [%%(id)s].%%(ext)s" %FORMAT_OPTS% "!TARGET_URL!"
 
-if %ERRORLEVEL% EQU 0 (
+if !ERRORLEVEL! EQU 0 (
     echo.
     echo ================================================================
     echo [SUCCESS] Download completed successfully!
@@ -107,7 +107,7 @@ if %ERRORLEVEL% EQU 0 (
 ) else (
     echo.
     echo ================================================================
-    echo [ERROR] Download encountered an issue (Exit Code: %ERRORLEVEL%).
+    echo [ERROR] Download encountered an issue (Exit Code: !ERRORLEVEL!).
     echo ================================================================
 )
 
