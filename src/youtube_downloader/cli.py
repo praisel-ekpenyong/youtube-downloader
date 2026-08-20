@@ -6,7 +6,7 @@ from rich.panel import Panel
 
 from youtube_downloader import __version__
 from youtube_downloader.config import OutputDestinationResolver
-from youtube_downloader.diagnostics import diagnose_error, render_diagnostic_panel
+from youtube_downloader.diagnostics import render_diagnostic_panel
 from youtube_downloader.engine import MediaDownloader
 from youtube_downloader.models import DownloadTask, MediaProfile
 from youtube_downloader.progress import RichProgressReporter
@@ -123,16 +123,17 @@ def download(
     reporter = RichProgressReporter(console=console)
     downloader = MediaDownloader(progress_reporter=reporter)
     try:
-        downloader.download(task)
-        console.print("[bold green]Download completed successfully![/bold green]")
+        outcome = downloader.download(task)
+        if outcome.success:
+            console.print("[bold green]Download completed successfully![/bold green]")
+        else:
+            if outcome.diagnostic:
+                panel = render_diagnostic_panel(outcome.diagnostic)
+                console.print(panel)
+            raise typer.Exit(code=1)
     except KeyboardInterrupt:
         console.print("\n[bold yellow]Download interrupted by user. Saved media has been finalized.[/bold yellow]")
         raise typer.Exit(code=130)
-    except Exception as exc:
-        report = diagnose_error(exc)
-        panel = render_diagnostic_panel(report)
-        console.print(panel)
-        raise typer.Exit(code=1)
 
 
 def main():

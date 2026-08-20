@@ -10,7 +10,7 @@ import yt_dlp  # type: ignore[import-untyped]
 
 from youtube_downloader.config import OutputDestinationResolver
 from youtube_downloader.diagnostics import diagnose_error
-from youtube_downloader.models import DownloadTask, MediaProfile
+from youtube_downloader.models import DownloadOutcome, DownloadTask, MediaProfile
 from youtube_downloader.progress import ProgressReporter, SilentProgressReporter
 
 
@@ -168,27 +168,35 @@ class MediaDownloader:
         max_retries: int = 3,
         retry_delay: float = 1.0,
         progress_reporter: Optional[ProgressReporter] = None,
-    ) -> None:
+    ) -> DownloadOutcome:
         """Execute the DownloadTask using yt-dlp with progress reporting and automatic retries."""
         resolver = self._get_resolver(task)
         resolver.ensure_destination()
         reporter = progress_reporter or self.progress_reporter
+        opts = self._build_ytdl_options(task, progress_hook=reporter.on_progress)
 
         attempt = 0
         while True:
             attempt += 1
             try:
                 with reporter:
-                    opts = self._build_ytdl_options(
-                        task, progress_hook=reporter.on_progress
-                    )
                     with yt_dlp.YoutubeDL(opts) as ydl:
                         ydl.download([task.target_url])
-                return
+                return DownloadOutcome(
+                    task=task,
+                    success=True,
+                    attempts=attempt,
+                )
             except Exception as exc:
                 diagnostic = diagnose_error(exc)
-                if diagnostic.is_transient and attempt < max_retries:
+                if diagnostic.is_transient and attempt <= max_retries:
                     time.sleep(retry_delay * attempt)
                     continue
-                raise
+                return DownloadOutcome(
+                    task=task,
+                    success=False,
+                    diagnostic=diagnostic,
+                    attempts=attempt,
+                    error=exc,
+                )
 

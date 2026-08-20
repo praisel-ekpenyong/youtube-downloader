@@ -104,7 +104,7 @@ def diagnose_error(error: Union[Exception, str]) -> DiagnosticReport:
             category=DiagnosticCategory.TRANSIENT_NETWORK,
             title="Transient Network Error",
             message=f"Network or remote server error encountered: {err_str}",
-            suggestion="Check your internet connection. Automatic retries will attempt recovery.",
+            suggestion="Check your network connection or try again later.",
             is_transient=True,
         )
 

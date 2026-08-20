@@ -1,7 +1,11 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import Any, Optional
+
+from youtube_downloader.diagnostics import DiagnosticReport
 
 
 class MediaProfile(str, Enum):
@@ -41,4 +45,15 @@ class DownloadTask:
     live_from_start: bool = True
     playlist_items: Optional[str] = None
     custom_format: Optional[str] = None
+
+
+@dataclass
+class DownloadOutcome:
+    """The structured result of a download execution."""
+    task: DownloadTask
+    success: bool
+    diagnostic: Optional[DiagnosticReport] = None
+    attempts: int = 1
+    error: Optional[Exception] = None
+
 

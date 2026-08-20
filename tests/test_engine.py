@@ -2,8 +2,9 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 import pytest
 
+from youtube_downloader.diagnostics import DiagnosticCategory
 from youtube_downloader.engine import MediaDownloader, find_ffmpeg_location
-from youtube_downloader.models import DownloadTask, MediaProfile
+from youtube_downloader.models import DownloadOutcome, DownloadTask, MediaProfile
 from youtube_downloader.progress import (
     ProgressReporter,
     RichProgressReporter,
@@ -223,10 +224,14 @@ def test_download_execution(mock_ytdl_class, tmp_path):
         output_destination=tmp_path / "Videos",
     )
 
-    downloader.download(task)
+    outcome = downloader.download(task)
 
     mock_ytdl_class.assert_called_once()
     mock_instance.download.assert_called_once_with(["https://youtube.com/watch?v=123"])
+    assert outcome.success is True
+    assert outcome.attempts == 1
+    assert outcome.diagnostic is None
+    assert outcome.task == task
 
 
 @patch("youtube_downloader.engine.yt_dlp.YoutubeDL")
@@ -245,13 +250,16 @@ def test_download_retries_on_transient_error_and_succeeds(mock_ytdl_class, tmp_p
         target_url="https://youtube.com/watch?v=123",
         output_destination=tmp_path / "Videos",
     )
-    downloader.download(task, max_retries=3, retry_delay=0.001)
+    outcome = downloader.download(task, max_retries=3, retry_delay=0.001)
 
     assert mock_instance.download.call_count == 2
+    assert outcome.success is True
+    assert outcome.attempts == 2
+    assert outcome.diagnostic is None
 
 
 @patch("youtube_downloader.engine.yt_dlp.YoutubeDL")
-def test_download_retries_exhaustion_raises(mock_ytdl_class, tmp_path):
+def test_download_retries_exhaustion_returns_failure_outcome(mock_ytdl_class, tmp_path):
     from yt_dlp.utils import DownloadError  # type: ignore[import-untyped]
 
     mock_instance = MagicMock()
@@ -264,10 +272,13 @@ def test_download_retries_exhaustion_raises(mock_ytdl_class, tmp_path):
         output_destination=tmp_path / "Videos",
     )
 
-    with pytest.raises(DownloadError):
-        downloader.download(task, max_retries=3, retry_delay=0.001)
+    outcome = downloader.download(task, max_retries=3, retry_delay=0.001)
 
-    assert mock_instance.download.call_count == 3
+    assert mock_instance.download.call_count == 4
+    assert outcome.success is False
+    assert outcome.attempts == 4
+    assert outcome.diagnostic is not None
+    assert outcome.diagnostic.category == DiagnosticCategory.TRANSIENT_NETWORK
 
 
 @patch("youtube_downloader.engine.yt_dlp.YoutubeDL")
@@ -284,10 +295,79 @@ def test_download_does_not_retry_on_non_transient_error(mock_ytdl_class, tmp_pat
         output_destination=tmp_path / "Videos",
     )
 
-    with pytest.raises(DownloadError):
-        downloader.download(task, max_retries=3, retry_delay=0.001)
+    outcome = downloader.download(task, max_retries=3, retry_delay=0.001)
 
     assert mock_instance.download.call_count == 1
+    assert outcome.success is False
+    assert outcome.attempts == 1
+    assert outcome.diagnostic is not None
+    assert outcome.diagnostic.category == DiagnosticCategory.AUTH_OR_AGE_RESTRICTED
+
+
+@patch("youtube_downloader.engine.yt_dlp.YoutubeDL")
+def test_download_failure_missing_ffmpeg(mock_ytdl_class):
+    mock_instance = MagicMock()
+    mock_instance.download.side_effect = Exception("ffmpeg not found, please install")
+    mock_ytdl_class.return_value.__enter__.return_value = mock_instance
+
+    downloader = MediaDownloader()
+    task = DownloadTask(target_url="https://youtube.com/watch?v=123")
+    outcome = downloader.download(task)
+
+    assert outcome.success is False
+    assert outcome.diagnostic is not None
+    assert outcome.diagnostic.category == DiagnosticCategory.MISSING_FFMPEG
+
+
+@patch("youtube_downloader.engine.yt_dlp.YoutubeDL")
+def test_download_failure_geo_blocked(mock_ytdl_class):
+    from yt_dlp.utils import DownloadError  # type: ignore[import-untyped]
+
+    mock_instance = MagicMock()
+    mock_instance.download.side_effect = DownloadError("The uploader has not made this video available in your country.")
+    mock_ytdl_class.return_value.__enter__.return_value = mock_instance
+
+    downloader = MediaDownloader()
+    task = DownloadTask(target_url="https://youtube.com/watch?v=123")
+    outcome = downloader.download(task)
+
+    assert outcome.success is False
+    assert outcome.diagnostic is not None
+    assert outcome.diagnostic.category == DiagnosticCategory.GEO_BLOCKED
+
+
+@patch("youtube_downloader.engine.yt_dlp.YoutubeDL")
+def test_download_failure_format_unavailable(mock_ytdl_class):
+    from yt_dlp.utils import DownloadError  # type: ignore[import-untyped]
+
+    mock_instance = MagicMock()
+    mock_instance.download.side_effect = DownloadError("Requested format is not available.")
+    mock_ytdl_class.return_value.__enter__.return_value = mock_instance
+
+    downloader = MediaDownloader()
+    task = DownloadTask(target_url="https://youtube.com/watch?v=123")
+    outcome = downloader.download(task)
+
+    assert outcome.success is False
+    assert outcome.diagnostic is not None
+    assert outcome.diagnostic.category == DiagnosticCategory.FORMAT_UNAVAILABLE
+
+
+@patch("youtube_downloader.engine.yt_dlp.YoutubeDL")
+def test_download_failure_not_found(mock_ytdl_class):
+    from yt_dlp.utils import DownloadError  # type: ignore[import-untyped]
+
+    mock_instance = MagicMock()
+    mock_instance.download.side_effect = DownloadError("Video unavailable. This video is private or removed.")
+    mock_ytdl_class.return_value.__enter__.return_value = mock_instance
+
+    downloader = MediaDownloader()
+    task = DownloadTask(target_url="https://youtube.com/watch?v=123")
+    outcome = downloader.download(task)
+
+    assert outcome.success is False
+    assert outcome.diagnostic is not None
+    assert outcome.diagnostic.category == DiagnosticCategory.NOT_FOUND_OR_UNAVAILABLE
 
 
 @patch("youtube_downloader.engine.yt_dlp.YoutubeDL")

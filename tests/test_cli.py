@@ -7,7 +7,8 @@ from yt_dlp.utils import DownloadError  # type: ignore[import-untyped]
 
 from youtube_downloader import __version__
 from youtube_downloader.cli import app
-from youtube_downloader.models import DownloadTask, MediaProfile
+from youtube_downloader.diagnostics import DiagnosticCategory, DiagnosticReport
+from youtube_downloader.models import DownloadOutcome, DownloadTask, MediaProfile
 from youtube_downloader.progress import RichProgressReporter
 
 runner = CliRunner()
@@ -179,7 +180,18 @@ def test_cli_executes_playlist_items_download(mock_downloader_cls):
 @patch("youtube_downloader.cli.MediaDownloader")
 def test_cli_handles_download_error_with_diagnostic_card(mock_downloader_cls):
     mock_downloader = mock_downloader_cls.return_value
-    mock_downloader.download.side_effect = DownloadError("Sign in to confirm your age.")
+    mock_downloader.download.return_value = DownloadOutcome(
+        task=DownloadTask(target_url="https://www.youtube.com/watch?v=age123"),
+        success=False,
+        diagnostic=DiagnosticReport(
+            category=DiagnosticCategory.AUTH_OR_AGE_RESTRICTED,
+            title="Age-Restricted or Authentication Required",
+            message="This video requires authentication or age verification.",
+            suggestion="Provide a valid cookies file (cookies.txt) or ensure your account has access.",
+            is_transient=False,
+        ),
+        attempts=1,
+    )
 
     result = runner.invoke(app, [
         "https://www.youtube.com/watch?v=age123",
@@ -187,6 +199,30 @@ def test_cli_handles_download_error_with_diagnostic_card(mock_downloader_cls):
     assert result.exit_code != 0
     assert "Age-Restricted" in result.stdout or "Authentication Required" in result.stdout
     assert "cookie" in result.stdout.lower()
+
+
+@patch("youtube_downloader.cli.MediaDownloader")
+def test_cli_handles_missing_ffmpeg_diagnostic_card(mock_downloader_cls):
+    mock_downloader = mock_downloader_cls.return_value
+    mock_downloader.download.return_value = DownloadOutcome(
+        task=DownloadTask(target_url="https://www.youtube.com/watch?v=audio123"),
+        success=False,
+        diagnostic=DiagnosticReport(
+            category=DiagnosticCategory.MISSING_FFMPEG,
+            title="FFmpeg Not Found",
+            message="FFmpeg or FFprobe executable is required for audio extraction, muxing, and subtitles.",
+            suggestion="Install FFmpeg to your system PATH or install the static-ffmpeg package.",
+            is_transient=False,
+        ),
+        attempts=1,
+    )
+
+    result = runner.invoke(app, [
+        "https://www.youtube.com/watch?v=audio123",
+    ])
+    assert result.exit_code == 1
+    assert "FFmpeg Not Found" in result.stdout
+    assert "static-ffmpeg" in result.stdout
 
 
 @patch("youtube_downloader.cli.MediaDownloader")
@@ -198,6 +234,7 @@ def test_cli_handles_keyboard_interrupt_gracefully(mock_downloader_cls):
         "https://www.youtube.com/watch?v=live123",
     ])
     assert "interrupted" in result.stdout.lower()
+    assert result.exit_code == 130
 
 
 @patch("youtube_downloader.cli.MediaDownloader")
