@@ -31,7 +31,7 @@ def find_ffmpeg_location() -> Optional[str]:
     return None
 
 
-PROFILE_FORMAT_SELECTORS: dict[MediaProfile, str] = {
+_PROFILE_FORMAT_SELECTORS: dict[MediaProfile, str] = {
     MediaProfile.BEST: "bestvideo+bestaudio/best",
     MediaProfile.P1080: "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best",
     MediaProfile.P720: "bestvideo[height<=720]+bestaudio/best[height<=720]/best",
@@ -39,7 +39,7 @@ PROFILE_FORMAT_SELECTORS: dict[MediaProfile, str] = {
     MediaProfile.AUDIO_FLAC: "bestaudio/best",
 }
 
-PROFILE_AUDIO_POSTPROCESSORS: dict[MediaProfile, dict[str, Any]] = {
+_PROFILE_AUDIO_POSTPROCESSORS: dict[MediaProfile, dict[str, Any]] = {
     MediaProfile.AUDIO_MP3: {
         "key": "FFmpegExtractAudio",
         "preferredcodec": "mp3",
@@ -73,32 +73,31 @@ class MediaDownloader:
         return self.destination_resolver
 
     @staticmethod
-    def get_format_for_profile(profile: MediaProfile, custom_format: Optional[str] = None) -> str:
+    def _get_format_for_profile(profile: MediaProfile, custom_format: Optional[str] = None) -> str:
         """Resolve format selector string based on MediaProfile."""
         if profile == MediaProfile.CUSTOM:
-            return custom_format or PROFILE_FORMAT_SELECTORS[MediaProfile.BEST]
-        return PROFILE_FORMAT_SELECTORS.get(profile, PROFILE_FORMAT_SELECTORS[MediaProfile.BEST])
+            return custom_format or _PROFILE_FORMAT_SELECTORS[MediaProfile.BEST]
+        return _PROFILE_FORMAT_SELECTORS.get(profile, _PROFILE_FORMAT_SELECTORS[MediaProfile.BEST])
 
     @staticmethod
-    def get_audio_postprocessor_for_profile(profile: MediaProfile) -> Optional[dict[str, Any]]:
+    def _get_audio_postprocessor_for_profile(profile: MediaProfile) -> Optional[dict[str, Any]]:
         """Resolve audio extraction postprocessor configuration for MediaProfile, if applicable."""
-        postprocessor = PROFILE_AUDIO_POSTPROCESSORS.get(profile)
+        postprocessor = _PROFILE_AUDIO_POSTPROCESSORS.get(profile)
         return dict(postprocessor) if postprocessor is not None else None
 
-    def build_ytdl_options(
+    def _build_ytdl_options(
         self,
         task: DownloadTask,
         progress_hook: Optional[Callable[[dict[str, Any]], None]] = None,
-        resolver: Optional[OutputDestinationResolver] = None,
     ) -> dict[str, Any]:
         """Construct yt-dlp options dictionary from a DownloadTask."""
         postprocessors: list[dict[str, Any]] = []
 
-        active_resolver = resolver or self._get_resolver(task)
+        active_resolver = self._get_resolver(task)
         outtmpl_str = active_resolver.build_output_template(task.media_profile)
 
         opts: dict[str, Any] = {
-            "format": self.get_format_for_profile(task.media_profile, task.custom_format),
+            "format": self._get_format_for_profile(task.media_profile, task.custom_format),
             "outtmpl": {"default": outtmpl_str},
             "noplaylist": False,
             "quiet": True,
@@ -121,7 +120,7 @@ class MediaDownloader:
             opts["noplaylist"] = False
 
         # Audio extraction postprocessors
-        audio_pp = self.get_audio_postprocessor_for_profile(task.media_profile)
+        audio_pp = self._get_audio_postprocessor_for_profile(task.media_profile)
         if audio_pp:
             postprocessors.append(audio_pp)
 
@@ -180,8 +179,8 @@ class MediaDownloader:
             attempt += 1
             try:
                 with reporter:
-                    opts = self.build_ytdl_options(
-                        task, progress_hook=reporter.on_progress, resolver=resolver
+                    opts = self._build_ytdl_options(
+                        task, progress_hook=reporter.on_progress
                     )
                     with yt_dlp.YoutubeDL(opts) as ydl:
                         ydl.download([task.target_url])
