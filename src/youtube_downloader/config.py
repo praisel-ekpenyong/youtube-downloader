@@ -7,7 +7,7 @@ DEFAULT_OUTPUT_ROOT = Path.home() / "Downloads" / "YouTube"
 
 
 class OutputDestinationResolver:
-    """Resolves Output Destination paths and media templates for Download Tasks."""
+    """Resolves Output Destination and media templates for Download Tasks."""
 
     def __init__(self, root_dir: Optional[Path] = None):
         self.root_dir = Path(root_dir) if root_dir else DEFAULT_OUTPUT_ROOT

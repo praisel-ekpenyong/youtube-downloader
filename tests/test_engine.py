@@ -205,38 +205,57 @@ def test_download_does_not_retry_on_non_transient_error(mock_ytdl_class, tmp_pat
     assert mock_instance.download.call_count == 1
 
 
-def test_media_profile_format_selectors():
-    assert MediaProfile.BEST.get_format_selector() == "bestvideo+bestaudio/best"
-    assert MediaProfile.P1080.get_format_selector() == "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best"
-    assert MediaProfile.P720.get_format_selector() == "bestvideo[height<=720]+bestaudio/best[height<=720]/best"
-    assert MediaProfile.AUDIO_MP3.get_format_selector() == "bestaudio/best"
-    assert MediaProfile.AUDIO_FLAC.get_format_selector() == "bestaudio/best"
-    assert MediaProfile.CUSTOM.get_format_selector("worst") == "worst"
-    assert MediaProfile.CUSTOM.get_format_selector(None) == "bestvideo+bestaudio/best"
+def test_engine_format_selectors():
+    downloader = MediaDownloader()
+    assert downloader.get_format_for_profile(MediaProfile.BEST) == "bestvideo+bestaudio/best"
+    assert downloader.get_format_for_profile(MediaProfile.P1080) == "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best"
+    assert downloader.get_format_for_profile(MediaProfile.P720) == "bestvideo[height<=720]+bestaudio/best[height<=720]/best"
+    assert downloader.get_format_for_profile(MediaProfile.AUDIO_MP3) == "bestaudio/best"
+    assert downloader.get_format_for_profile(MediaProfile.AUDIO_FLAC) == "bestaudio/best"
+    assert downloader.get_format_for_profile(MediaProfile.CUSTOM, "worst") == "worst"
+    assert downloader.get_format_for_profile(MediaProfile.CUSTOM, None) == "bestvideo+bestaudio/best"
 
 
-def test_media_profile_category_and_audio_postprocessors():
+def test_engine_audio_postprocessors():
+    downloader = MediaDownloader()
+    assert downloader.get_audio_postprocessor_for_profile(MediaProfile.BEST) is None
+    assert downloader.get_audio_postprocessor_for_profile(MediaProfile.P1080) is None
+    assert downloader.get_audio_postprocessor_for_profile(MediaProfile.P720) is None
+    assert downloader.get_audio_postprocessor_for_profile(MediaProfile.CUSTOM) is None
+    assert downloader.get_audio_postprocessor_for_profile(MediaProfile.AUDIO_MP3) == {
+        "key": "FFmpegExtractAudio",
+        "preferredcodec": "mp3",
+        "preferredquality": "320",
+    }
+    assert downloader.get_audio_postprocessor_for_profile(MediaProfile.AUDIO_FLAC) == {
+        "key": "FFmpegExtractAudio",
+        "preferredcodec": "flac",
+        "preferredquality": "0",
+    }
+
+    # Verify mutation safety
+    mp3_pp = downloader.get_audio_postprocessor_for_profile(MediaProfile.AUDIO_MP3)
+    assert mp3_pp is not None
+    mp3_pp["preferredcodec"] = "aac"
+    fresh_mp3_pp = downloader.get_audio_postprocessor_for_profile(MediaProfile.AUDIO_MP3)
+    assert fresh_mp3_pp is not None
+    assert fresh_mp3_pp["preferredcodec"] == "mp3"
+
+
+def test_media_profile_domain_properties():
     assert MediaProfile.BEST.category_folder == "Videos"
     assert MediaProfile.P1080.category_folder == "Videos"
     assert MediaProfile.P720.category_folder == "Videos"
     assert MediaProfile.AUDIO_MP3.category_folder == "Audio"
     assert MediaProfile.AUDIO_FLAC.category_folder == "Audio"
 
-    assert MediaProfile.BEST.audio_postprocessor is None
-    assert MediaProfile.AUDIO_MP3.audio_postprocessor == {
-        "key": "FFmpegExtractAudio",
-        "preferredcodec": "mp3",
-        "preferredquality": "320",
-    }
-    assert MediaProfile.AUDIO_FLAC.audio_postprocessor == {
-        "key": "FFmpegExtractAudio",
-        "preferredcodec": "flac",
-        "preferredquality": "0",
-    }
-
     assert MediaProfile.BEST.supports_subtitles is True
     assert MediaProfile.AUDIO_MP3.supports_subtitles is False
     assert MediaProfile.AUDIO_FLAC.supports_subtitles is False
+
+    # Models must remain decoupled from backend library specifics
+    assert not hasattr(MediaProfile.BEST, "audio_postprocessor")
+    assert not hasattr(MediaProfile.BEST, "get_format_selector")
 
 
 def test_find_ffmpeg_location_in_path():
