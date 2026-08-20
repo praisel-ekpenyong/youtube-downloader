@@ -10,8 +10,8 @@ from youtube_downloader.models import DownloadTask, MediaProfile
 
 def prompt_interactive_task(console: Optional[Console] = None) -> Optional[DownloadTask]:
     """Guide the user interactively through configuring a DownloadTask."""
-    c = console or Console()
-    c.print(
+    active_console = console or Console()
+    active_console.print(
         Panel.fit(
             "[bold cyan]YouTube Downloader — Interactive Wizard[/bold cyan]\n"
             "Configure your download step-by-step. Press [yellow]Ctrl+C[/yellow] at any time to cancel.",
@@ -24,9 +24,9 @@ def prompt_interactive_task(console: Optional[Console] = None) -> Optional[Downl
         # 1. Target URL
         target_url = ""
         while not target_url:
-            target_url = Prompt.ask("[bold green]Enter Target URL[/bold green]", console=c).strip()
+            target_url = Prompt.ask("[bold green]Enter Target URL[/bold green]", console=active_console).strip()
             if not target_url:
-                c.print("[red]Target URL cannot be empty. Please enter a valid URL.[/red]")
+                active_console.print("[red]Target URL cannot be empty. Please enter a valid URL.[/red]")
 
         # 2. Media Profile
         profile_choices = [p.value for p in MediaProfile]
@@ -34,7 +34,7 @@ def prompt_interactive_task(console: Optional[Console] = None) -> Optional[Downl
             "[bold cyan]Select Media Profile[/bold cyan]",
             choices=profile_choices,
             default=MediaProfile.BEST.value,
-            console=c,
+            console=active_console,
         )
         media_profile = MediaProfile(profile_str)
 
@@ -43,48 +43,48 @@ def prompt_interactive_task(console: Optional[Console] = None) -> Optional[Downl
             custom_format = Prompt.ask(
                 "[bold cyan]Enter custom yt-dlp format selector[/bold cyan]",
                 default="bestvideo+bestaudio/best",
-                console=c,
+                console=active_console,
             ).strip()
 
         # 3. Playlist items range
         items_input = Prompt.ask(
             "[bold magenta]Playlist item range (optional, e.g. '1-5', leave blank for all)[/bold magenta]",
             default="",
-            console=c,
+            console=active_console,
         ).strip()
         playlist_items = items_input if items_input else None
 
         # 4. Enrichment and recording options
         embed_subtitles = False
-        if not media_profile.is_audio_only:
+        if media_profile.supports_subtitles:
             embed_subtitles = Confirm.ask(
                 "[bold cyan]Embed subtitle tracks (if available)?[/bold cyan]",
                 default=True,
-                console=c,
+                console=active_console,
             )
 
         embed_chapters = Confirm.ask(
             "[bold cyan]Embed chapter markers?[/bold cyan]",
             default=True,
-            console=c,
+            console=active_console,
         )
 
         embed_metadata = Confirm.ask(
             "[bold cyan]Embed metadata tags?[/bold cyan]",
             default=True,
-            console=c,
+            console=active_console,
         )
 
         embed_thumbnail = Confirm.ask(
             "[bold cyan]Embed thumbnail artwork?[/bold cyan]",
             default=True,
-            console=c,
+            console=active_console,
         )
 
         live_from_start = Confirm.ask(
             "[bold cyan]Record livestreams from start (if applicable)?[/bold cyan]",
             default=True,
-            console=c,
+            console=active_console,
         )
 
         return DownloadTask(
@@ -100,5 +100,5 @@ def prompt_interactive_task(console: Optional[Console] = None) -> Optional[Downl
         )
 
     except (KeyboardInterrupt, EOFError):
-        c.print("\n[yellow]Interactive wizard cancelled.[/yellow]")
+        active_console.print("\n[yellow]Interactive wizard cancelled.[/yellow]")
         return None

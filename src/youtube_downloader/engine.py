@@ -26,10 +26,20 @@ console = Console()
 
 
 def find_ffmpeg_location() -> Optional[str]:
-    """Locate FFmpeg executable directory from system PATH or environment."""
+    """Locate FFmpeg executable directory from system PATH, environment, or static_ffmpeg."""
     if shutil.which("ffmpeg"):
         return None  # System FFmpeg is already in PATH
-    return os.environ.get("FFMPEG_LOCATION") or os.environ.get("FFMPEG_PATH")
+    ffmpeg_env = os.environ.get("FFMPEG_LOCATION") or os.environ.get("FFMPEG_PATH")
+    if ffmpeg_env:
+        return ffmpeg_env
+    try:
+        import static_ffmpeg  # type: ignore[import-untyped]
+        static_ffmpeg.add_paths()
+        if shutil.which("ffmpeg"):
+            return None
+    except Exception:
+        pass
+    return None
 
 
 PROFILE_FORMAT_SELECTORS: dict[MediaProfile, str] = {
@@ -81,8 +91,8 @@ class MediaDownloader:
     @staticmethod
     def get_audio_postprocessor_for_profile(profile: MediaProfile) -> Optional[dict[str, Any]]:
         """Resolve audio extraction postprocessor configuration for MediaProfile, if applicable."""
-        pp = PROFILE_AUDIO_POSTPROCESSORS.get(profile)
-        return dict(pp) if pp is not None else None
+        postprocessor = PROFILE_AUDIO_POSTPROCESSORS.get(profile)
+        return dict(postprocessor) if postprocessor is not None else None
 
     def build_ytdl_options(
         self,
@@ -105,6 +115,11 @@ class MediaDownloader:
             "concurrent_fragment_downloads": 6,
             "downloader": {"default": "m3u8:native"},
             "live_from_start": task.live_from_start,
+            "extractor_args": {
+                "youtube": {
+                    "player_client": ["android", "web"],
+                }
+            },
         }
 
         if self.ffmpeg_dir:
@@ -123,7 +138,8 @@ class MediaDownloader:
         if task.media_profile.supports_subtitles and task.embed_subtitles:
             opts["writesubtitles"] = True
             opts["writeautomaticsub"] = True
-            opts["subtitleslangs"] = ["all", "-live_chat"]
+            opts["subtitleslangs"] = ["en.*", "en", "-live_chat"]
+            opts["subtitlesignoreerrors"] = True
             postprocessors.append({
                 "key": "FFmpegEmbedSubtitle",
                 "already_have_subtitle": False,

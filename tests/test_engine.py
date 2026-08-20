@@ -274,4 +274,19 @@ def test_find_ffmpeg_location_not_found():
             assert find_ffmpeg_location() is None
 
 
+def test_extractor_args_configured():
+    downloader = MediaDownloader()
+    task = DownloadTask(target_url="https://youtube.com/watch?v=123")
+    opts = downloader.build_ytdl_options(task)
+    assert "extractor_args" in opts
+    assert opts["extractor_args"]["youtube"]["player_client"] == ["android", "web"]
+
+
+def test_find_ffmpeg_location_static_ffmpeg():
+    with patch("shutil.which", side_effect=[None, "C:/static_ffmpeg/bin/ffmpeg.exe"]):
+        with patch.dict("os.environ", {}, clear=True):
+            assert find_ffmpeg_location() is None
+
+
+
 

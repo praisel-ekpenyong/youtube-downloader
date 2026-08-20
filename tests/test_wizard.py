@@ -50,6 +50,48 @@ def test_prompt_interactive_task_audio_flac_skips_subtitles():
     assert mock_confirm.call_count == 4
 
 
+def test_prompt_interactive_task_audio_mp3_skips_subtitles():
+    console = Console(record=True)
+    with patch("rich.prompt.Prompt.ask") as mock_ask, patch("rich.prompt.Confirm.ask") as mock_confirm:
+        mock_ask.side_effect = [
+            "https://www.youtube.com/watch?v=podcast123",
+            "audio-mp3",
+            "",
+        ]
+        # Chapters, Metadata, Thumbnail, Live from start (4 prompts, subtitles skipped)
+        mock_confirm.side_effect = [True, False, True, False]
+        task = prompt_interactive_task(console=console)
+
+    assert task is not None
+    assert task.target_url == "https://www.youtube.com/watch?v=podcast123"
+    assert task.media_profile == MediaProfile.AUDIO_MP3
+    assert task.embed_subtitles is False
+    assert task.embed_chapters is True
+    assert task.embed_metadata is False
+    assert task.embed_thumbnail is True
+    assert task.live_from_start is False
+    assert mock_confirm.call_count == 4
+
+
+def test_prompt_interactive_task_video_profile_prompts_subtitles():
+    console = Console(record=True)
+    for profile_name, profile_enum in [("720p", MediaProfile.P720), ("1080p", MediaProfile.P1080), ("best", MediaProfile.BEST)]:
+        with patch("rich.prompt.Prompt.ask") as mock_ask, patch("rich.prompt.Confirm.ask") as mock_confirm:
+            mock_ask.side_effect = [
+                "https://www.youtube.com/watch?v=vid123",
+                profile_name,
+                "",
+            ]
+            # Subtitles, Chapters, Metadata, Thumbnail, Live from start (5 prompts)
+            mock_confirm.side_effect = [True, True, True, True, True]
+            task = prompt_interactive_task(console=console)
+
+        assert task is not None
+        assert task.media_profile == profile_enum
+        assert task.embed_subtitles is True
+        assert mock_confirm.call_count == 5
+
+
 def test_prompt_interactive_task_custom_profile():
     console = Console(record=True)
     with patch("rich.prompt.Prompt.ask") as mock_ask, patch("rich.prompt.Confirm.ask", return_value=True):

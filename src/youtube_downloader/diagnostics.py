@@ -142,7 +142,7 @@ def render_diagnostic_panel(report: DiagnosticReport) -> Panel:
     )
     return Panel(
         content,
-        title=f"[bold red]✖ {report.title}[/bold red]",
+        title=f"[bold red]{report.title}[/bold red]",
         border_style="red",
         expand=False,
     )

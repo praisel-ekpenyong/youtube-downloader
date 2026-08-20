@@ -122,7 +122,7 @@ def download(
     downloader = MediaDownloader()
     try:
         downloader.download(task)
-        console.print("[bold green]✔ Download completed successfully![/bold green]")
+        console.print("[bold green]Download completed successfully![/bold green]")
     except KeyboardInterrupt:
         console.print("\n[bold yellow]Download interrupted by user. Saved media has been finalized.[/bold yellow]")
         raise typer.Exit(code=130)

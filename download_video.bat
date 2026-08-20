@@ -91,7 +91,7 @@ echo ================================================================
 echo URL: %TARGET_URL%
 echo.
 
-%YTDLP_CMD% %FFMPEG_PARAM% --downloader "m3u8:native" --live-from-start -N 6 --paths "%OUTPUT_DIR%" -o "%%(title)s [%%(id)s].%%(ext)s" %FORMAT_OPTS% "%TARGET_URL%"
+%YTDLP_CMD% %FFMPEG_PARAM% --extractor-args "youtube:player_client=android,web" --downloader "m3u8:native" --live-from-start -N 6 --paths "%OUTPUT_DIR%" -o "%%(title)s [%%(id)s].%%(ext)s" %FORMAT_OPTS% "%TARGET_URL%"
 
 if %ERRORLEVEL% EQU 0 (
     echo.
