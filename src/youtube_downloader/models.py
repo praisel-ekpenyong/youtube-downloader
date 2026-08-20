@@ -1,7 +1,7 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 
 class MediaProfile(str, Enum):
@@ -16,6 +16,51 @@ class MediaProfile(str, Enum):
     @property
     def is_audio_only(self) -> bool:
         return self in (MediaProfile.AUDIO_MP3, MediaProfile.AUDIO_FLAC)
+
+    @property
+    def category_folder(self) -> str:
+        """Subdirectory name under the output destination for this profile."""
+        return "Audio" if self.is_audio_only else "Videos"
+
+    @property
+    def supports_subtitles(self) -> bool:
+        """Whether this profile supports embedding subtitle tracks."""
+        return not self.is_audio_only
+
+    @property
+    def audio_postprocessor(self) -> Optional[dict[str, Any]]:
+        """Audio extraction postprocessor configuration, if applicable."""
+        match self:
+            case MediaProfile.AUDIO_MP3:
+                return {
+                    "key": "FFmpegExtractAudio",
+                    "preferredcodec": "mp3",
+                    "preferredquality": "320",
+                }
+            case MediaProfile.AUDIO_FLAC:
+                return {
+                    "key": "FFmpegExtractAudio",
+                    "preferredcodec": "flac",
+                    "preferredquality": "0",
+                }
+            case _:
+                return None
+
+    def get_format_selector(self, custom_format: Optional[str] = None) -> str:
+        """Resolve the yt-dlp format selector string for this profile."""
+        match self:
+            case MediaProfile.BEST:
+                return "bestvideo+bestaudio/best"
+            case MediaProfile.P1080:
+                return "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best"
+            case MediaProfile.P720:
+                return "bestvideo[height<=720]+bestaudio/best[height<=720]/best"
+            case MediaProfile.AUDIO_MP3 | MediaProfile.AUDIO_FLAC:
+                return "bestaudio/best"
+            case MediaProfile.CUSTOM:
+                return custom_format or "bestvideo+bestaudio/best"
+            case _:
+                return "bestvideo+bestaudio/best"
 
 
 @dataclass
@@ -32,14 +77,3 @@ class DownloadTask:
     playlist_items: Optional[str] = None
     custom_format: Optional[str] = None
 
-
-@dataclass
-class DownloadQueue:
-    """An ordered collection of Download Tasks to be executed."""
-    tasks: list[DownloadTask] = field(default_factory=list)
-
-    def add(self, task: DownloadTask) -> None:
-        self.tasks.append(task)
-
-    def __len__(self) -> int:
-        return len(self.tasks)

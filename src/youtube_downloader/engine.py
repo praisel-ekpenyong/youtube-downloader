@@ -18,25 +18,18 @@ from rich.progress import (
 )
 
 import time
+from youtube_downloader.config import OutputDestinationResolver
 from youtube_downloader.diagnostics import diagnose_error
 from youtube_downloader.models import DownloadTask, MediaProfile
 
 console = Console()
 
 
-
 def find_ffmpeg_location() -> Optional[str]:
-    """Locate FFmpeg executable directory from system PATH or static_ffmpeg package."""
+    """Locate FFmpeg executable directory from system PATH or environment."""
     if shutil.which("ffmpeg"):
         return None  # System FFmpeg is already in PATH
-    try:
-        import static_ffmpeg
-        paths = static_ffmpeg.run.get_or_fetch_platform_executables_else_raise()
-        if paths and len(paths) > 0:
-            return os.path.dirname(paths[0])
-    except Exception:
-        pass
-    return None
+    return os.environ.get("FFMPEG_LOCATION") or os.environ.get("FFMPEG_PATH")
 
 
 class MediaDownloader:
@@ -47,19 +40,7 @@ class MediaDownloader:
 
     def get_format_for_profile(self, profile: MediaProfile, custom_format: Optional[str] = None) -> str:
         """Resolve format selector string based on MediaProfile."""
-        match profile:
-            case MediaProfile.BEST:
-                return "bestvideo+bestaudio/best"
-            case MediaProfile.P1080:
-                return "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best"
-            case MediaProfile.P720:
-                return "bestvideo[height<=720]+bestaudio/best[height<=720]/best"
-            case MediaProfile.AUDIO_MP3 | MediaProfile.AUDIO_FLAC:
-                return "bestaudio/best"
-            case MediaProfile.CUSTOM:
-                return custom_format or "bestvideo+bestaudio/best"
-            case _:
-                return "bestvideo+bestaudio/best"
+        return profile.get_format_selector(custom_format)
 
     def build_ytdl_options(
         self,
@@ -69,8 +50,8 @@ class MediaDownloader:
         """Construct yt-dlp options dictionary from a DownloadTask."""
         postprocessors: list[dict[str, Any]] = []
 
-        default_category = "Audio" if task.media_profile.is_audio_only else "Videos"
-        outtmpl_str = f"%(playlist_title&Playlists|{default_category})s/%(playlist_title&{{}}|.)s/%(playlist_index&{{:02d}} - |)s%(title)s [%(id)s].%(ext)s"
+        resolver = OutputDestinationResolver(task.output_destination)
+        outtmpl_str = resolver.build_output_template(task.media_profile)
 
         opts: dict[str, Any] = {
             "format": self.get_format_for_profile(task.media_profile, task.custom_format),
@@ -94,21 +75,12 @@ class MediaDownloader:
             opts["noplaylist"] = False
 
         # Audio extraction postprocessors
-        if task.media_profile == MediaProfile.AUDIO_MP3:
-            postprocessors.append({
-                "key": "FFmpegExtractAudio",
-                "preferredcodec": "mp3",
-                "preferredquality": "320",
-            })
-        elif task.media_profile == MediaProfile.AUDIO_FLAC:
-            postprocessors.append({
-                "key": "FFmpegExtractAudio",
-                "preferredcodec": "flac",
-                "preferredquality": "0",
-            })
+        audio_pp = task.media_profile.audio_postprocessor
+        if audio_pp:
+            postprocessors.append(audio_pp)
 
         # Subtitles (only for video profiles)
-        if not task.media_profile.is_audio_only and task.embed_subtitles:
+        if task.media_profile.supports_subtitles and task.embed_subtitles:
             opts["writesubtitles"] = True
             opts["writeautomaticsub"] = True
             opts["subtitleslangs"] = ["all", "-live_chat"]
@@ -151,8 +123,7 @@ class MediaDownloader:
         retry_delay: float = 1.0,
     ) -> None:
         """Execute the DownloadTask using yt-dlp with rich progress display and automatic retries."""
-        if task.output_destination:
-            task.output_destination.mkdir(parents=True, exist_ok=True)
+        OutputDestinationResolver(task.output_destination).ensure_destination()
 
         attempt = 0
         while True:

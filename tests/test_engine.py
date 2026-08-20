@@ -2,7 +2,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 import pytest
 
-from youtube_downloader.engine import MediaDownloader
+from youtube_downloader.engine import MediaDownloader, find_ffmpeg_location
 from youtube_downloader.models import DownloadTask, MediaProfile
 
 
@@ -192,4 +192,56 @@ def test_download_does_not_retry_on_non_transient_error(mock_ytdl_class):
         downloader.download(task, max_retries=3, retry_delay=0.001)
 
     assert mock_instance.download.call_count == 1
+
+
+def test_media_profile_format_selectors():
+    assert MediaProfile.BEST.get_format_selector() == "bestvideo+bestaudio/best"
+    assert MediaProfile.P1080.get_format_selector() == "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best"
+    assert MediaProfile.P720.get_format_selector() == "bestvideo[height<=720]+bestaudio/best[height<=720]/best"
+    assert MediaProfile.AUDIO_MP3.get_format_selector() == "bestaudio/best"
+    assert MediaProfile.AUDIO_FLAC.get_format_selector() == "bestaudio/best"
+    assert MediaProfile.CUSTOM.get_format_selector("worst") == "worst"
+    assert MediaProfile.CUSTOM.get_format_selector(None) == "bestvideo+bestaudio/best"
+
+
+def test_media_profile_category_and_audio_postprocessors():
+    assert MediaProfile.BEST.category_folder == "Videos"
+    assert MediaProfile.P1080.category_folder == "Videos"
+    assert MediaProfile.P720.category_folder == "Videos"
+    assert MediaProfile.AUDIO_MP3.category_folder == "Audio"
+    assert MediaProfile.AUDIO_FLAC.category_folder == "Audio"
+
+    assert MediaProfile.BEST.audio_postprocessor is None
+    assert MediaProfile.AUDIO_MP3.audio_postprocessor == {
+        "key": "FFmpegExtractAudio",
+        "preferredcodec": "mp3",
+        "preferredquality": "320",
+    }
+    assert MediaProfile.AUDIO_FLAC.audio_postprocessor == {
+        "key": "FFmpegExtractAudio",
+        "preferredcodec": "flac",
+        "preferredquality": "0",
+    }
+
+    assert MediaProfile.BEST.supports_subtitles is True
+    assert MediaProfile.AUDIO_MP3.supports_subtitles is False
+    assert MediaProfile.AUDIO_FLAC.supports_subtitles is False
+
+
+def test_find_ffmpeg_location_in_path():
+    with patch("shutil.which", return_value="C:/ffmpeg/bin/ffmpeg.exe"):
+        assert find_ffmpeg_location() is None
+
+
+def test_find_ffmpeg_location_not_in_path_with_env():
+    with patch("shutil.which", return_value=None), patch.dict("os.environ", {"FFMPEG_LOCATION": "C:/custom_ffmpeg/bin"}):
+        assert find_ffmpeg_location() == "C:/custom_ffmpeg/bin"
+
+
+def test_find_ffmpeg_location_not_found():
+    with patch("shutil.which", return_value=None), patch.dict("os.environ", {"FFMPEG_LOCATION": "", "FFMPEG_PATH": ""}, clear=False):
+        with patch.dict("os.environ", {}, clear=True):
+            assert find_ffmpeg_location() is None
+
+
 

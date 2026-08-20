@@ -45,3 +45,23 @@ def test_resolve_for_media_profile_audio():
     resolver = OutputDestinationResolver()
     assert resolver.resolve_for_profile(MediaProfile.AUDIO_MP3) == resolver.resolve_audio_dir()
     assert resolver.resolve_for_profile(MediaProfile.AUDIO_FLAC) == resolver.resolve_audio_dir()
+
+
+def test_build_output_template():
+    resolver = OutputDestinationResolver()
+    video_tmpl = resolver.build_output_template(MediaProfile.BEST)
+    assert "Playlists|Videos" in video_tmpl
+    assert "%(title)s [%(id)s].%(ext)s" in video_tmpl
+
+    audio_tmpl = resolver.build_output_template(MediaProfile.AUDIO_MP3)
+    assert "Playlists|Audio" in audio_tmpl
+
+
+def test_ensure_destination(tmp_path):
+    dest = tmp_path / "created_dir"
+    resolver = OutputDestinationResolver(root_dir=dest)
+    assert not dest.exists()
+    result = resolver.ensure_destination()
+    assert dest.exists()
+    assert result == dest
+

@@ -41,7 +41,14 @@ class OutputDestinationResolver:
             return self.resolve_audio_dir()
         return self.resolve_video_dir()
 
-    def ensure_destination(self, path: Path) -> Path:
+    def build_output_template(self, profile: MediaProfile) -> str:
+        """Build the yt-dlp outtmpl string for a given MediaProfile."""
+        category = profile.category_folder
+        return f"%(playlist_title&Playlists|{category})s/%(playlist_title&{{}}|.)s/%(playlist_index&{{:02d}} - |)s%(title)s [%(id)s].%(ext)s"
+
+    def ensure_destination(self, path: Optional[Path] = None) -> Path:
         """Ensure the destination directory exists and return it."""
-        path.mkdir(parents=True, exist_ok=True)
-        return path
+        target = Path(path) if path else self.root_dir
+        target.mkdir(parents=True, exist_ok=True)
+        return target
+
