@@ -26,7 +26,7 @@ class OutputDestinationResolver:
         """Resolve the output destination directory for audio media."""
         return self.root_dir / "Audio"
 
-    def resolve_playlist_dir(self, playlist_title: str) -> Path:
+    def resolve_playlist_folder(self, playlist_title: str) -> Path:
         """Resolve the output destination directory for a playlist."""
         sanitized = sanitize_filename(playlist_title)
         return self.root_dir / "Playlists" / sanitized
@@ -36,7 +36,7 @@ class OutputDestinationResolver:
     ) -> Path:
         """Resolve destination directory based on MediaProfile and playlist context."""
         if playlist_title:
-            return self.resolve_playlist_dir(playlist_title)
+            return self.resolve_playlist_folder(playlist_title)
         if profile.is_audio_only:
             return self.resolve_audio_dir()
         return self.resolve_video_dir()

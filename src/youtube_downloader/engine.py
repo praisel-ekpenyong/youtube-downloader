@@ -75,7 +75,7 @@ class MediaDownloader:
         opts: dict[str, Any] = {
             "format": self.get_format_for_profile(task.media_profile, task.custom_format),
             "outtmpl": {"default": outtmpl_str},
-            "noplaylist": task.playlist_items is None,
+            "noplaylist": False,
             "quiet": True,
             "no_warnings": True,
             "concurrent_fragment_downloads": 6,

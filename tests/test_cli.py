@@ -23,8 +23,10 @@ def test_cli_help():
     assert result.exit_code == 0
     assert "YouTube Downloader" in result.stdout
     assert "--profile" in result.stdout or "-p" in result.stdout
-    assert "--output-dir" in result.stdout or "-o" in result.stdout
+    assert "--output-destination" in result.stdout or "-o" in result.stdout
+    assert "--custom-format" in result.stdout or "-f" in result.stdout
     assert "--items" in result.stdout or "--playlist-items" in result.stdout
+    assert "--dry-run" not in result.stdout
 
 
 @patch("youtube_downloader.cli.prompt_interactive_task")
@@ -55,18 +57,56 @@ def test_cli_no_args_wizard_cancelled(mock_downloader_cls, mock_wizard):
     mock_downloader.download.assert_not_called()
 
 
-def test_cli_parse_arguments():
+@patch("youtube_downloader.cli.MediaDownloader")
+def test_cli_parse_arguments_and_custom_format(mock_downloader_cls):
+    mock_downloader = mock_downloader_cls.return_value
     result = runner.invoke(app, [
         "https://www.youtube.com/watch?v=example123",
-        "--profile", "1080p",
+        "--profile", "custom",
+        "--custom-format", "bestvideo[height<=480]+bestaudio/best",
+        "--output-destination", "C:/tmp/yt_test",
         "--no-subs",
         "--no-metadata",
         "--items", "1-3",
-        "--dry-run"
     ])
     assert result.exit_code == 0
-    assert "https://www.youtube.com/watch?v=example123" in result.stdout
-    assert "1080p" in result.stdout
+    mock_downloader.download.assert_called_once()
+    task = mock_downloader.download.call_args[0][0]
+    assert task.target_url == "https://www.youtube.com/watch?v=example123"
+    assert task.media_profile == MediaProfile.CUSTOM
+    assert task.custom_format == "bestvideo[height<=480]+bestaudio/best"
+    assert task.output_destination == Path("C:/tmp/yt_test")
+    assert task.embed_subtitles is False
+    assert task.embed_metadata is False
+    assert task.playlist_items == "1-3"
+
+
+@patch("youtube_downloader.cli.MediaDownloader")
+def test_cli_short_flags(mock_downloader_cls):
+    mock_downloader = mock_downloader_cls.return_value
+    result = runner.invoke(app, [
+        "https://www.youtube.com/watch?v=example123",
+        "-p", "custom",
+        "-f", "worst",
+        "-o", "C:/tmp/yt_test2",
+    ])
+    assert result.exit_code == 0
+    task = mock_downloader.download.call_args[0][0]
+    assert task.media_profile == MediaProfile.CUSTOM
+    assert task.custom_format == "worst"
+    assert task.output_destination == Path("C:/tmp/yt_test2")
+
+
+@patch("youtube_downloader.cli.MediaDownloader")
+def test_cli_output_dir_alias(mock_downloader_cls):
+    mock_downloader = mock_downloader_cls.return_value
+    result = runner.invoke(app, [
+        "https://www.youtube.com/watch?v=example123",
+        "--output-dir", "C:/tmp/yt_alias",
+    ])
+    assert result.exit_code == 0
+    task = mock_downloader.download.call_args[0][0]
+    assert task.output_destination == Path("C:/tmp/yt_alias")
 
 
 @patch("youtube_downloader.cli.MediaDownloader")

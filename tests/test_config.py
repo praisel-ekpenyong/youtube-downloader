@@ -30,7 +30,7 @@ def test_resolve_audio_destination():
 
 def test_resolve_playlist_destination():
     resolver = OutputDestinationResolver()
-    dest = resolver.resolve_playlist_dir("Favorite Tracks")
+    dest = resolver.resolve_playlist_folder("Favorite Tracks")
     assert dest == Path.home() / "Downloads" / "YouTube" / "Playlists" / "Favorite Tracks"
 
 

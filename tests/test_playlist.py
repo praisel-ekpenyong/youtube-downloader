@@ -17,6 +17,16 @@ def test_playlist_items_options():
     assert opts.get("playlist_items") == "1-5"
 
 
+def test_playlist_without_items_allows_full_playlist():
+    downloader = MediaDownloader()
+    task = DownloadTask(
+        target_url="https://youtube.com/playlist?list=PL123",
+        playlist_items=None,
+    )
+    opts = downloader.build_ytdl_options(task)
+    assert opts.get("noplaylist") is False
+
+
 def test_playlist_output_template_routing(tmp_path):
     downloader = MediaDownloader()
     task = DownloadTask(

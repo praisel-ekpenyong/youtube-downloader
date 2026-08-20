@@ -38,11 +38,18 @@ def download(
         "-p",
         help="Media Profile specifying resolution, bitrate, codec, and container format.",
     ),
-    output_dir: Optional[Path] = typer.Option(
+    output_destination: Optional[Path] = typer.Option(
         None,
+        "--output-destination",
         "--output-dir",
         "-o",
         help="Custom Output Destination directory override.",
+    ),
+    custom_format: Optional[str] = typer.Option(
+        None,
+        "--custom-format",
+        "-f",
+        help="Custom yt-dlp format selector string when using custom profile.",
     ),
     embed_subs: bool = typer.Option(
         True,
@@ -75,11 +82,6 @@ def download(
         "--playlist-items",
         help="Playlist items filter (e.g. '1-5', '1,3,5').",
     ),
-    dry_run: bool = typer.Option(
-        False,
-        "--dry-run",
-        help="Simulate execution without downloading media.",
-    ),
     version: Optional[bool] = typer.Option(
         None,
         "--version",
@@ -90,7 +92,7 @@ def download(
     ),
 ):
     """YouTube Downloader — Download, convert, and organize media from YouTube."""
-    resolver = OutputDestinationResolver(root_dir=output_dir)
+    resolver = OutputDestinationResolver(root_dir=output_destination)
     dest_path = resolver.root_dir
 
     if not target_url:
@@ -103,6 +105,7 @@ def download(
         task = DownloadTask(
             target_url=target_url,
             media_profile=profile,
+            custom_format=custom_format,
             output_destination=dest_path,
             embed_subtitles=embed_subs,
             embed_metadata=embed_metadata,
@@ -115,10 +118,6 @@ def download(
     console.print(f"[bold green]Target URL:[/bold green] {task.target_url}")
     console.print(f"[bold cyan]Media Profile:[/bold cyan] {task.media_profile.value}")
     console.print(f"[bold magenta]Output Destination:[/bold magenta] {task.output_destination or dest_path}")
-
-    if dry_run:
-        console.print("[yellow][Dry Run] Task constructed successfully. Exiting without download.[/yellow]")
-        return
 
     downloader = MediaDownloader()
     try:
