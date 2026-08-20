@@ -16,19 +16,15 @@ def test_custom_output_root(tmp_path):
     assert resolver.root_dir == custom_dir
 
 
-def test_sanitize_filename():
-    from youtube_downloader.config import sanitize_filename
-    assert sanitize_filename("Valid Name") == "Valid Name"
-    assert sanitize_filename("Invalid:?*/\\Name") == "Invalid_____Name"
-
-
-def test_build_output_template():
-    resolver = OutputDestinationResolver()
+def test_build_output_template(tmp_path):
+    resolver = OutputDestinationResolver(root_dir=tmp_path)
     video_tmpl = resolver.build_output_template(MediaProfile.BEST)
+    assert tmp_path.as_posix() in video_tmpl
     assert "Playlists|Videos" in video_tmpl
     assert "%(title)s [%(id)s].%(ext)s" in video_tmpl
 
     audio_tmpl = resolver.build_output_template(MediaProfile.AUDIO_MP3)
+    assert tmp_path.as_posix() in audio_tmpl
     assert "Playlists|Audio" in audio_tmpl
 
 

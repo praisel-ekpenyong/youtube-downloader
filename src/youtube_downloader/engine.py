@@ -35,8 +35,19 @@ def find_ffmpeg_location() -> Optional[str]:
 class MediaDownloader:
     """Core download engine wrapping yt-dlp with rich feedback and media profiles."""
 
-    def __init__(self, ffmpeg_dir: Optional[str] = None):
+    def __init__(
+        self,
+        ffmpeg_dir: Optional[str] = None,
+        destination_resolver: Optional[OutputDestinationResolver] = None,
+    ):
         self.ffmpeg_dir = ffmpeg_dir or find_ffmpeg_location()
+        self.destination_resolver = destination_resolver or OutputDestinationResolver()
+
+    def _get_resolver(self, task: DownloadTask) -> OutputDestinationResolver:
+        """Get the OutputDestinationResolver for a given task."""
+        if task.output_destination:
+            return OutputDestinationResolver(task.output_destination)
+        return self.destination_resolver
 
     def get_format_for_profile(self, profile: MediaProfile, custom_format: Optional[str] = None) -> str:
         """Resolve format selector string based on MediaProfile."""
@@ -50,7 +61,7 @@ class MediaDownloader:
         """Construct yt-dlp options dictionary from a DownloadTask."""
         postprocessors: list[dict[str, Any]] = []
 
-        resolver = OutputDestinationResolver(task.output_destination)
+        resolver = self._get_resolver(task)
         outtmpl_str = resolver.build_output_template(task.media_profile)
 
         opts: dict[str, Any] = {
@@ -123,7 +134,8 @@ class MediaDownloader:
         retry_delay: float = 1.0,
     ) -> None:
         """Execute the DownloadTask using yt-dlp with rich progress display and automatic retries."""
-        OutputDestinationResolver(task.output_destination).ensure_destination()
+        resolver = self._get_resolver(task)
+        resolver.ensure_destination()
 
         attempt = 0
         while True:
