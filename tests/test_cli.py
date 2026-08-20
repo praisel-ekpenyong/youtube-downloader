@@ -19,6 +19,7 @@ def test_cli_help():
     assert "YouTube Downloader" in result.stdout
     assert "--profile" in result.stdout or "-p" in result.stdout
     assert "--output-dir" in result.stdout or "-o" in result.stdout
+    assert "--items" in result.stdout or "--playlist-items" in result.stdout
 
 
 def test_cli_no_args_shows_prompt_message():
@@ -54,7 +55,7 @@ def test_cli_executes_download(mock_downloader_cls):
     task = mock_downloader.download.call_args[0][0]
     assert task.target_url == "https://www.youtube.com/watch?v=example123"
     assert task.media_profile.value == "720p"
-    assert task.output_destination == Path.home() / "Downloads" / "YouTube" / "Videos"
+    assert task.output_destination == Path.home() / "Downloads" / "YouTube"
     assert "Download completed successfully" in result.stdout
 
 
@@ -71,7 +72,7 @@ def test_cli_executes_audio_mp3_download(mock_downloader_cls):
     task = mock_downloader.download.call_args[0][0]
     assert task.target_url == "https://www.youtube.com/watch?v=example123"
     assert task.media_profile.value == "audio-mp3"
-    assert task.output_destination == Path.home() / "Downloads" / "YouTube" / "Audio"
+    assert task.output_destination == Path.home() / "Downloads" / "YouTube"
     assert "Download completed successfully" in result.stdout
 
 
@@ -88,5 +89,20 @@ def test_cli_executes_audio_flac_download(mock_downloader_cls):
     task = mock_downloader.download.call_args[0][0]
     assert task.target_url == "https://www.youtube.com/watch?v=example123"
     assert task.media_profile.value == "audio-flac"
-    assert task.output_destination == Path.home() / "Downloads" / "YouTube" / "Audio"
+    assert task.output_destination == Path.home() / "Downloads" / "YouTube"
     assert "Download completed successfully" in result.stdout
+
+
+@patch("youtube_downloader.cli.MediaDownloader")
+def test_cli_executes_playlist_items_download(mock_downloader_cls):
+    mock_downloader = mock_downloader_cls.return_value
+    result = runner.invoke(app, [
+        "https://www.youtube.com/playlist?list=PL123",
+        "--playlist-items", "1-5",
+    ])
+    assert result.exit_code == 0
+    mock_downloader_cls.assert_called_once()
+    mock_downloader.download.assert_called_once()
+    task = mock_downloader.download.call_args[0][0]
+    assert task.target_url == "https://www.youtube.com/playlist?list=PL123"
+    assert task.playlist_items == "1-5"

@@ -70,6 +70,7 @@ def download(
     items: Optional[str] = typer.Option(
         None,
         "--items",
+        "--playlist-items",
         help="Playlist items filter (e.g. '1-5', '1,3,5').",
     ),
     dry_run: bool = typer.Option(
@@ -98,7 +99,7 @@ def download(
         return
 
     resolver = OutputDestinationResolver(root_dir=output_dir)
-    dest_path = resolver.resolve_for_profile(profile)
+    dest_path = resolver.root_dir
 
     task = DownloadTask(
         target_url=target_url,

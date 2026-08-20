@@ -66,9 +66,12 @@ class MediaDownloader:
         """Construct yt-dlp options dictionary from a DownloadTask."""
         postprocessors: list[dict[str, Any]] = []
 
+        default_category = "Audio" if task.media_profile.is_audio_only else "Videos"
+        outtmpl_str = f"%(playlist_title&Playlists|{default_category})s/%(playlist_title&{{}}|.)s/%(playlist_index&{{:02d}} - |)s%(title)s [%(id)s].%(ext)s"
+
         opts: dict[str, Any] = {
             "format": self.get_format_for_profile(task.media_profile, task.custom_format),
-            "outtmpl": {"default": "%(title)s [%(id)s].%(ext)s"},
+            "outtmpl": {"default": outtmpl_str},
             "noplaylist": task.playlist_items is None,
             "quiet": True,
             "no_warnings": True,
