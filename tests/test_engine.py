@@ -140,3 +140,56 @@ def test_download_execution(mock_ytdl_class):
 
     mock_ytdl_class.assert_called_once()
     mock_instance.download.assert_called_once_with(["https://youtube.com/watch?v=123"])
+
+
+@patch("youtube_downloader.engine.yt_dlp.YoutubeDL")
+def test_download_retries_on_transient_error_and_succeeds(mock_ytdl_class):
+    from yt_dlp.utils import DownloadError  # type: ignore[import-untyped]
+
+    mock_instance = MagicMock()
+    mock_instance.download.side_effect = [
+        DownloadError("HTTP Error 503: Service Unavailable"),
+        None,
+    ]
+    mock_ytdl_class.return_value.__enter__.return_value = mock_instance
+
+    downloader = MediaDownloader()
+    task = DownloadTask(target_url="https://youtube.com/watch?v=123")
+    downloader.download(task, max_retries=3, retry_delay=0.001)
+
+    assert mock_instance.download.call_count == 2
+
+
+@patch("youtube_downloader.engine.yt_dlp.YoutubeDL")
+def test_download_retries_exhaustion_raises(mock_ytdl_class):
+    from yt_dlp.utils import DownloadError  # type: ignore[import-untyped]
+
+    mock_instance = MagicMock()
+    mock_instance.download.side_effect = DownloadError("HTTP Error 503: Service Unavailable")
+    mock_ytdl_class.return_value.__enter__.return_value = mock_instance
+
+    downloader = MediaDownloader()
+    task = DownloadTask(target_url="https://youtube.com/watch?v=123")
+
+    with pytest.raises(DownloadError):
+        downloader.download(task, max_retries=3, retry_delay=0.001)
+
+    assert mock_instance.download.call_count == 3
+
+
+@patch("youtube_downloader.engine.yt_dlp.YoutubeDL")
+def test_download_does_not_retry_on_non_transient_error(mock_ytdl_class):
+    from yt_dlp.utils import DownloadError  # type: ignore[import-untyped]
+
+    mock_instance = MagicMock()
+    mock_instance.download.side_effect = DownloadError("Sign in to confirm your age.")
+    mock_ytdl_class.return_value.__enter__.return_value = mock_instance
+
+    downloader = MediaDownloader()
+    task = DownloadTask(target_url="https://youtube.com/watch?v=123")
+
+    with pytest.raises(DownloadError):
+        downloader.download(task, max_retries=3, retry_delay=0.001)
+
+    assert mock_instance.download.call_count == 1
+

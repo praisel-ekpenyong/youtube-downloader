@@ -1,8 +1,13 @@
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
+import pytest
 from typer.testing import CliRunner
+from yt_dlp.utils import DownloadError  # type: ignore[import-untyped]
+
+
 from youtube_downloader import __version__
 from youtube_downloader.cli import app
+from youtube_downloader.models import DownloadTask, MediaProfile
 
 runner = CliRunner()
 
@@ -22,10 +27,32 @@ def test_cli_help():
     assert "--items" in result.stdout or "--playlist-items" in result.stdout
 
 
-def test_cli_no_args_shows_prompt_message():
+@patch("youtube_downloader.cli.prompt_interactive_task")
+@patch("youtube_downloader.cli.MediaDownloader")
+def test_cli_no_args_launches_wizard_and_downloads(mock_downloader_cls, mock_wizard):
+    mock_downloader = mock_downloader_cls.return_value
+    mock_wizard.return_value = DownloadTask(
+        target_url="https://www.youtube.com/watch?v=wizard123",
+        media_profile=MediaProfile.P1080,
+    )
+
     result = runner.invoke(app, [])
     assert result.exit_code == 0
-    assert "No Target URL provided" in result.stdout
+    mock_wizard.assert_called_once()
+    mock_downloader.download.assert_called_once()
+    assert "Download completed successfully" in result.stdout
+
+
+@patch("youtube_downloader.cli.prompt_interactive_task")
+@patch("youtube_downloader.cli.MediaDownloader")
+def test_cli_no_args_wizard_cancelled(mock_downloader_cls, mock_wizard):
+    mock_downloader = mock_downloader_cls.return_value
+    mock_wizard.return_value = None
+
+    result = runner.invoke(app, [])
+    assert result.exit_code == 0
+    mock_wizard.assert_called_once()
+    mock_downloader.download.assert_not_called()
 
 
 def test_cli_parse_arguments():
@@ -106,3 +133,27 @@ def test_cli_executes_playlist_items_download(mock_downloader_cls):
     task = mock_downloader.download.call_args[0][0]
     assert task.target_url == "https://www.youtube.com/playlist?list=PL123"
     assert task.playlist_items == "1-5"
+
+
+@patch("youtube_downloader.cli.MediaDownloader")
+def test_cli_handles_download_error_with_diagnostic_card(mock_downloader_cls):
+    mock_downloader = mock_downloader_cls.return_value
+    mock_downloader.download.side_effect = DownloadError("Sign in to confirm your age.")
+
+    result = runner.invoke(app, [
+        "https://www.youtube.com/watch?v=age123",
+    ])
+    assert result.exit_code != 0
+    assert "Age-Restricted" in result.stdout or "Authentication Required" in result.stdout
+    assert "cookie" in result.stdout.lower()
+
+
+@patch("youtube_downloader.cli.MediaDownloader")
+def test_cli_handles_keyboard_interrupt_gracefully(mock_downloader_cls):
+    mock_downloader = mock_downloader_cls.return_value
+    mock_downloader.download.side_effect = KeyboardInterrupt()
+
+    result = runner.invoke(app, [
+        "https://www.youtube.com/watch?v=live123",
+    ])
+    assert "interrupted" in result.stdout.lower()

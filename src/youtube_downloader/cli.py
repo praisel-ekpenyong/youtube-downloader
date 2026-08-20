@@ -6,8 +6,10 @@ from rich.panel import Panel
 
 from youtube_downloader import __version__
 from youtube_downloader.config import OutputDestinationResolver
+from youtube_downloader.diagnostics import diagnose_error, render_diagnostic_panel
 from youtube_downloader.engine import MediaDownloader
 from youtube_downloader.models import DownloadTask, MediaProfile
+from youtube_downloader.wizard import prompt_interactive_task
 
 app = typer.Typer(
     name="ytdl",
@@ -88,42 +90,48 @@ def download(
     ),
 ):
     """YouTube Downloader — Download, convert, and organize media from YouTube."""
-    if not target_url:
-        console.print(
-            Panel.fit(
-                "[bold yellow]No Target URL provided.[/bold yellow]\n"
-                "Run [cyan]ytdl --help[/cyan] for usage instructions, or provide a URL.",
-                title="YouTube Downloader",
-            )
-        )
-        return
-
     resolver = OutputDestinationResolver(root_dir=output_dir)
     dest_path = resolver.root_dir
 
-    task = DownloadTask(
-        target_url=target_url,
-        media_profile=profile,
-        output_destination=dest_path,
-        embed_subtitles=embed_subs,
-        embed_metadata=embed_metadata,
-        embed_chapters=embed_chapters,
-        embed_thumbnail=embed_thumbnail,
-        live_from_start=live_from_start,
-        playlist_items=items,
-    )
+    if not target_url:
+        task = prompt_interactive_task(console=console)
+        if task is None:
+            return
+        if not task.output_destination:
+            task.output_destination = dest_path
+    else:
+        task = DownloadTask(
+            target_url=target_url,
+            media_profile=profile,
+            output_destination=dest_path,
+            embed_subtitles=embed_subs,
+            embed_metadata=embed_metadata,
+            embed_chapters=embed_chapters,
+            embed_thumbnail=embed_thumbnail,
+            live_from_start=live_from_start,
+            playlist_items=items,
+        )
 
     console.print(f"[bold green]Target URL:[/bold green] {task.target_url}")
     console.print(f"[bold cyan]Media Profile:[/bold cyan] {task.media_profile.value}")
-    console.print(f"[bold magenta]Output Destination:[/bold magenta] {dest_path}")
+    console.print(f"[bold magenta]Output Destination:[/bold magenta] {task.output_destination or dest_path}")
 
     if dry_run:
         console.print("[yellow][Dry Run] Task constructed successfully. Exiting without download.[/yellow]")
         return
 
     downloader = MediaDownloader()
-    downloader.download(task)
-    console.print("[bold green]✔ Download completed successfully![/bold green]")
+    try:
+        downloader.download(task)
+        console.print("[bold green]✔ Download completed successfully![/bold green]")
+    except KeyboardInterrupt:
+        console.print("\n[bold yellow]Download interrupted by user. Saved media has been finalized.[/bold yellow]")
+        raise typer.Exit(code=130)
+    except Exception as exc:
+        report = diagnose_error(exc)
+        panel = render_diagnostic_panel(report)
+        console.print(panel)
+        raise typer.Exit(code=1)
 
 
 def main():
