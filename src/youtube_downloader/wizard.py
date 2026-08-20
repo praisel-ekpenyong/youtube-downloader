@@ -54,17 +54,35 @@ def prompt_interactive_task(console: Optional[Console] = None) -> Optional[Downl
         ).strip()
         playlist_items = items_input if items_input else None
 
-        # 4. Enrichment options
-        embed_subtitles = True
+        # 4. Enrichment and recording options
+        embed_subtitles = False
         if not media_profile.is_audio_only:
             embed_subtitles = Confirm.ask(
-                "[bold cyan]Embed subtitles (if available)?[/bold cyan]",
+                "[bold cyan]Embed subtitle tracks (if available)?[/bold cyan]",
                 default=True,
                 console=c,
             )
 
+        embed_chapters = Confirm.ask(
+            "[bold cyan]Embed chapter markers?[/bold cyan]",
+            default=True,
+            console=c,
+        )
+
         embed_metadata = Confirm.ask(
-            "[bold cyan]Embed metadata tags, chapters, and thumbnails?[/bold cyan]",
+            "[bold cyan]Embed metadata tags?[/bold cyan]",
+            default=True,
+            console=c,
+        )
+
+        embed_thumbnail = Confirm.ask(
+            "[bold cyan]Embed thumbnail artwork?[/bold cyan]",
+            default=True,
+            console=c,
+        )
+
+        live_from_start = Confirm.ask(
+            "[bold cyan]Record livestreams from start (if applicable)?[/bold cyan]",
             default=True,
             console=c,
         )
@@ -76,8 +94,9 @@ def prompt_interactive_task(console: Optional[Console] = None) -> Optional[Downl
             playlist_items=playlist_items,
             embed_subtitles=embed_subtitles,
             embed_metadata=embed_metadata,
-            embed_chapters=embed_metadata,
-            embed_thumbnail=embed_metadata,
+            embed_chapters=embed_chapters,
+            embed_thumbnail=embed_thumbnail,
+            live_from_start=live_from_start,
         )
 
     except (KeyboardInterrupt, EOFError):

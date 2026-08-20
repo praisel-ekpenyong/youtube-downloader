@@ -21,22 +21,33 @@ def test_prompt_interactive_task_default_flow():
     assert task.media_profile == MediaProfile.BEST
     assert task.playlist_items is None
     assert task.embed_subtitles is True
+    assert task.embed_chapters is True
     assert task.embed_metadata is True
+    assert task.embed_thumbnail is True
+    assert task.live_from_start is True
 
 
-def test_prompt_interactive_task_audio_flac():
+def test_prompt_interactive_task_audio_flac_skips_subtitles():
     console = Console(record=True)
-    with patch("rich.prompt.Prompt.ask") as mock_ask, patch("rich.prompt.Confirm.ask", return_value=True):
+    with patch("rich.prompt.Prompt.ask") as mock_ask, patch("rich.prompt.Confirm.ask") as mock_confirm:
         mock_ask.side_effect = [
             "https://www.youtube.com/watch?v=music123",
             "audio-flac",
             "",
         ]
+        # Chapters, Metadata, Thumbnail, Live from start (4 prompts, subtitles skipped)
+        mock_confirm.side_effect = [True, True, True, False]
         task = prompt_interactive_task(console=console)
 
     assert task is not None
     assert task.target_url == "https://www.youtube.com/watch?v=music123"
     assert task.media_profile == MediaProfile.AUDIO_FLAC
+    assert task.embed_subtitles is False
+    assert task.embed_chapters is True
+    assert task.embed_metadata is True
+    assert task.embed_thumbnail is True
+    assert task.live_from_start is False
+    assert mock_confirm.call_count == 4
 
 
 def test_prompt_interactive_task_custom_profile():
@@ -55,9 +66,59 @@ def test_prompt_interactive_task_custom_profile():
     assert task.media_profile == MediaProfile.CUSTOM
     assert task.custom_format == "worstvideo+worstaudio"
     assert task.playlist_items == "1-3"
+    assert task.embed_subtitles is True
+    assert task.embed_chapters is True
+    assert task.embed_metadata is True
+    assert task.embed_thumbnail is True
+    assert task.live_from_start is True
 
 
-def test_prompt_interactive_task_aborted():
+def test_prompt_interactive_task_granular_options():
+    console = Console(record=True)
+    with patch("rich.prompt.Prompt.ask") as mock_ask, patch("rich.prompt.Confirm.ask") as mock_confirm:
+        mock_ask.side_effect = [
+            "https://www.youtube.com/watch?v=wizard123",  # URL
+            "1080p",                                      # Media profile
+            "2-4",                                        # Playlist items
+        ]
+        mock_confirm.side_effect = [
+            False,  # embed_subtitles
+            True,   # embed_chapters
+            False,  # embed_metadata
+            True,   # embed_thumbnail
+            False,  # live_from_start
+        ]
+        task = prompt_interactive_task(console=console)
+
+    assert task is not None
+    assert task.target_url == "https://www.youtube.com/watch?v=wizard123"
+    assert task.media_profile == MediaProfile.P1080
+    assert task.playlist_items == "2-4"
+    assert task.embed_subtitles is False
+    assert task.embed_chapters is True
+    assert task.embed_metadata is False
+    assert task.embed_thumbnail is True
+    assert task.live_from_start is False
+    assert mock_confirm.call_count == 5
+
+
+def test_prompt_interactive_task_empty_url_retry():
+    console = Console(record=True)
+    with patch("rich.prompt.Prompt.ask") as mock_ask, patch("rich.prompt.Confirm.ask", return_value=True):
+        mock_ask.side_effect = [
+            "",                                           # Empty URL first
+            "   ",                                        # Whitespace URL second
+            "https://www.youtube.com/watch?v=valid123",   # Valid URL
+            "best",                                       # Media profile
+            "",                                           # Playlist items
+        ]
+        task = prompt_interactive_task(console=console)
+
+    assert task is not None
+    assert task.target_url == "https://www.youtube.com/watch?v=valid123"
+
+
+def test_prompt_interactive_task_aborted_keyboard_interrupt():
     console = Console(record=True)
     with patch("rich.prompt.Prompt.ask", side_effect=KeyboardInterrupt):
         task = prompt_interactive_task(console=console)
@@ -65,20 +126,9 @@ def test_prompt_interactive_task_aborted():
     assert task is None
 
 
-def test_prompt_interactive_task_custom_options():
+def test_prompt_interactive_task_aborted_eof_error():
     console = Console(record=True)
-    with patch("rich.prompt.Prompt.ask") as mock_ask, patch("rich.prompt.Confirm.ask") as mock_confirm:
-        mock_ask.side_effect = [
-            "https://www.youtube.com/watch?v=wizard123",  # URL
-            "best",                                       # Media profile
-            "",                                           # Playlist items
-        ]
-        mock_confirm.side_effect = [
-            False,  # embed_subtitles
-            False,  # embed_metadata
-        ]
+    with patch("rich.prompt.Prompt.ask", side_effect=EOFError):
         task = prompt_interactive_task(console=console)
 
-    assert task is not None
-    assert task.embed_subtitles is False
-    assert task.embed_metadata is False
+    assert task is None
