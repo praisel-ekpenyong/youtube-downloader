@@ -94,20 +94,20 @@ def download(
 ):
     """YouTube Downloader — Download, convert, and organize media from YouTube."""
     resolver = OutputDestinationResolver(root_dir=output_destination)
-    dest_path = resolver.root_dir
+    resolved_destination = resolver.resolve_destination()
 
     if not target_url:
         task = prompt_interactive_task(console=console)
         if task is None:
             return
         if not task.output_destination:
-            task.output_destination = dest_path
+            task.output_destination = resolved_destination
     else:
         task = DownloadTask(
             target_url=target_url,
             media_profile=profile,
             custom_format=custom_format,
-            output_destination=dest_path,
+            output_destination=resolved_destination,
             embed_subtitles=embed_subs,
             embed_metadata=embed_metadata,
             embed_chapters=embed_chapters,
@@ -118,10 +118,10 @@ def download(
 
     console.print(f"[bold green]Target URL:[/bold green] {task.target_url}")
     console.print(f"[bold cyan]Media Profile:[/bold cyan] {task.media_profile.value}")
-    console.print(f"[bold magenta]Output Destination:[/bold magenta] {task.output_destination or dest_path}")
+    console.print(f"[bold magenta]Output Destination:[/bold magenta] {resolver.resolve_destination(task=task)}")
 
     reporter = RichProgressReporter(console=console)
-    downloader = MediaDownloader(progress_reporter=reporter)
+    downloader = MediaDownloader(destination_resolver=resolver, progress_reporter=reporter)
     try:
         outcome = downloader.download(task)
         if outcome.success:

@@ -66,12 +66,6 @@ class MediaDownloader:
         self.destination_resolver = destination_resolver or OutputDestinationResolver()
         self.progress_reporter: ProgressReporter = progress_reporter or SilentProgressReporter()
 
-    def _get_resolver(self, task: DownloadTask) -> OutputDestinationResolver:
-        """Get the OutputDestinationResolver for a given task."""
-        if task.output_destination and task.output_destination != self.destination_resolver.root_dir:
-            return OutputDestinationResolver(task.output_destination)
-        return self.destination_resolver
-
     @staticmethod
     def _get_format_for_profile(profile: MediaProfile, custom_format: Optional[str] = None) -> str:
         """Resolve format selector string based on MediaProfile."""
@@ -93,8 +87,7 @@ class MediaDownloader:
         """Construct yt-dlp options dictionary from a DownloadTask."""
         postprocessors: list[dict[str, Any]] = []
 
-        active_resolver = self._get_resolver(task)
-        outtmpl_str = active_resolver.build_output_template(task.media_profile)
+        outtmpl_str = self.destination_resolver.build_output_template(task)
 
         opts: dict[str, Any] = {
             "format": self._get_format_for_profile(task.media_profile, task.custom_format),
@@ -170,8 +163,7 @@ class MediaDownloader:
         progress_reporter: Optional[ProgressReporter] = None,
     ) -> DownloadOutcome:
         """Execute the DownloadTask using yt-dlp with progress reporting and automatic retries."""
-        resolver = self._get_resolver(task)
-        resolver.ensure_destination()
+        self.destination_resolver.ensure_destination(task=task)
         reporter = progress_reporter or self.progress_reporter
         opts = self._build_ytdl_options(task, progress_hook=reporter.on_progress)
 
