@@ -51,6 +51,8 @@ class MediaDownloader:
                 return "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best"
             case MediaProfile.P720:
                 return "bestvideo[height<=720]+bestaudio/best[height<=720]/best"
+            case MediaProfile.AUDIO_MP3 | MediaProfile.AUDIO_FLAC:
+                return "bestaudio/best"
             case MediaProfile.CUSTOM:
                 return custom_format or "bestvideo+bestaudio/best"
             case _:
@@ -85,8 +87,22 @@ class MediaDownloader:
             opts["playlist_items"] = task.playlist_items
             opts["noplaylist"] = False
 
-        # Subtitles
-        if task.embed_subtitles:
+        # Audio extraction postprocessors
+        if task.media_profile == MediaProfile.AUDIO_MP3:
+            postprocessors.append({
+                "key": "FFmpegExtractAudio",
+                "preferredcodec": "mp3",
+                "preferredquality": "320",
+            })
+        elif task.media_profile == MediaProfile.AUDIO_FLAC:
+            postprocessors.append({
+                "key": "FFmpegExtractAudio",
+                "preferredcodec": "flac",
+                "preferredquality": "0",
+            })
+
+        # Subtitles (only for video profiles)
+        if not task.media_profile.is_audio_only and task.embed_subtitles:
             opts["writesubtitles"] = True
             opts["writeautomaticsub"] = True
             opts["subtitleslangs"] = ["all", "-live_chat"]

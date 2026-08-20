@@ -27,6 +27,45 @@ def test_format_selection_720p():
     assert opts["format"] == "bestvideo[height<=720]+bestaudio/best[height<=720]/best"
 
 
+def test_format_selection_audio_mp3():
+    downloader = MediaDownloader()
+    task = DownloadTask(
+        target_url="https://youtube.com/watch?v=123",
+        media_profile=MediaProfile.AUDIO_MP3,
+        embed_metadata=True,
+        embed_thumbnail=True,
+    )
+    opts = downloader.build_ytdl_options(task)
+    assert opts["format"] == "bestaudio/best"
+    
+    postprocessors = opts.get("postprocessors", [])
+    audio_pp = next((pp for pp in postprocessors if pp.get("key") == "FFmpegExtractAudio"), None)
+    assert audio_pp is not None
+    assert audio_pp.get("preferredcodec") == "mp3"
+    assert audio_pp.get("preferredquality") in ("320", "0")
+    
+    # Check that metadata and thumbnails are also configured
+    assert any(pp.get("key") == "FFmpegMetadata" for pp in postprocessors)
+    assert any(pp.get("key") == "EmbedThumbnail" for pp in postprocessors)
+    # Audio tasks should not embed subtitles
+    assert not any(pp.get("key") == "FFmpegEmbedSubtitle" for pp in postprocessors)
+
+
+def test_format_selection_audio_flac():
+    downloader = MediaDownloader()
+    task = DownloadTask(
+        target_url="https://youtube.com/watch?v=123",
+        media_profile=MediaProfile.AUDIO_FLAC,
+    )
+    opts = downloader.build_ytdl_options(task)
+    assert opts["format"] == "bestaudio/best"
+    
+    postprocessors = opts.get("postprocessors", [])
+    audio_pp = next((pp for pp in postprocessors if pp.get("key") == "FFmpegExtractAudio"), None)
+    assert audio_pp is not None
+    assert audio_pp.get("preferredcodec") == "flac"
+
+
 def test_format_selection_custom():
     downloader = MediaDownloader()
     task = DownloadTask(

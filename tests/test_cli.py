@@ -1,3 +1,4 @@
+from pathlib import Path
 from unittest.mock import patch
 from typer.testing import CliRunner
 from youtube_downloader import __version__
@@ -53,4 +54,39 @@ def test_cli_executes_download(mock_downloader_cls):
     task = mock_downloader.download.call_args[0][0]
     assert task.target_url == "https://www.youtube.com/watch?v=example123"
     assert task.media_profile.value == "720p"
+    assert task.output_destination == Path.home() / "Downloads" / "YouTube" / "Videos"
+    assert "Download completed successfully" in result.stdout
+
+
+@patch("youtube_downloader.cli.MediaDownloader")
+def test_cli_executes_audio_mp3_download(mock_downloader_cls):
+    mock_downloader = mock_downloader_cls.return_value
+    result = runner.invoke(app, [
+        "https://www.youtube.com/watch?v=example123",
+        "--profile", "audio-mp3",
+    ])
+    assert result.exit_code == 0
+    mock_downloader_cls.assert_called_once()
+    mock_downloader.download.assert_called_once()
+    task = mock_downloader.download.call_args[0][0]
+    assert task.target_url == "https://www.youtube.com/watch?v=example123"
+    assert task.media_profile.value == "audio-mp3"
+    assert task.output_destination == Path.home() / "Downloads" / "YouTube" / "Audio"
+    assert "Download completed successfully" in result.stdout
+
+
+@patch("youtube_downloader.cli.MediaDownloader")
+def test_cli_executes_audio_flac_download(mock_downloader_cls):
+    mock_downloader = mock_downloader_cls.return_value
+    result = runner.invoke(app, [
+        "https://www.youtube.com/watch?v=example123",
+        "--profile", "audio-flac",
+    ])
+    assert result.exit_code == 0
+    mock_downloader_cls.assert_called_once()
+    mock_downloader.download.assert_called_once()
+    task = mock_downloader.download.call_args[0][0]
+    assert task.target_url == "https://www.youtube.com/watch?v=example123"
+    assert task.media_profile.value == "audio-flac"
+    assert task.output_destination == Path.home() / "Downloads" / "YouTube" / "Audio"
     assert "Download completed successfully" in result.stdout
